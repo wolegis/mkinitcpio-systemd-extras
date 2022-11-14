@@ -1,0 +1,51 @@
+#!/bin/bash
+
+build() {
+    add_systemd_unit systemd-resolved.service
+
+    # enable systemd-resolved.service
+    add_symlink /etc/systemd/system/sysinit.target.wants/systemd-resolved.service \
+                /usr/lib/systemd/system/systemd-resolved.service
+
+    if [[ -r "$SD_RESOLVE_CONFIG" ]]; then
+        add_file "$SD_RESOLVE_CONFIG" /etc/systemd/resolved.conf
+        if [[ -d "${SD_RESOLVE_CONFIG}.d" ]]; then
+            add_dir /etc/systemd/resolved.conf.d
+            tar --directory="${SD_RESOLVE_CONFIG}.d" --create --to-stdout . | \
+                tar --directory="$BUILDROOT/etc/systemd/resolved.conf.d" --extract --file=-
+        fi
+    else
+        add_file /etc/systemd/resolved.conf
+        if [[ -d /etc/systemd/resolved.conf.d ]]; then
+            add_full_dir /etc/systemd/resolved.conf.d
+        fi
+    fi
+    add_file /etc/hostname
+    add_symlink /etc/resolv.conf /run/systemd/resolve/resolv.conf
+    add_file /usr/lib/systemd/resolv.conf
+
+    add_binary /usr/lib/libnss_dns.so.2
+    add_dir /var/tmp
+
+    # systemd-resolved.service requires user systemd-resolve
+    grep '^systemd-resolve:' /etc/passwd >>"$BUILDROOT/etc/passwd"
+    grep '^systemd-resolve:' /etc/shadow >>"$BUILDROOT/etc/shadow"
+    grep '^systemd-resolve:' /etc/group >>"$BUILDROOT/etc/group"
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables DNS name resolution with systemd-resolved during early boot.
+
+It copies all required files and binaries to initramfs and enables
+systemd-resolved.service.  Configuration is copied either
+
+ o  from /etc/systemd/resolved.conf and optionally from
+    /etc/systemd/resolved.conf.d in case this directory exists or
+
+ o  from \$SD_RESOLVE_CONFIG in case this is a readable file and optionally
+    \$SD_RESOLVE_CONFIG.d in case this is an existing directory.
+
+SD_RESOLVE_CONFIG is supposed to be set in /etc/mkinitcpio.conf.
+__EOF_HELP__
+}

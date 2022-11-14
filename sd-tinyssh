@@ -1,0 +1,96 @@
+#!/bin/bash
+
+build() {
+    if ! pacman -Qi tinyssh >/dev/null 2>&1; then
+        error "package tinyssh not installed"
+        return 1
+    fi
+
+    add_systemd_unit tinyssh@.socket
+    add_systemd_unit tinyssh@.service
+
+    # enable tinysshd listening on TCP port 22
+    add_symlink /etc/systemd/system/sysinit.target.wants/tinyssh@22.socket /usr/lib/systemd/system/tinyssh@.socket
+
+    local drop_in=(
+        '[Unit]'
+        'WantedBy=cryptsetup-pre.target'
+        'Before=cryptsetup-pre.target'
+        'Requires=systemd-networkd.service'
+        'After=systemd-networkd.service'
+        'DefaultDependencies=no'
+    )
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@22.socket override
+
+    drop_in=(
+        '[Unit]'
+        'DefaultDependencies=no'
+    )
+    if [[ -n "$SD_TINYSSH_COMMAND" ]]; then
+        drop_in=(
+            "${drop_in[@]}"
+            ""
+            "[Service]"
+            'ExecStart='
+            "ExecStart=/usr/bin/tinysshd -e '${SD_TINYSSH_COMMAND}' /etc/tinyssh/sshkeydir"
+        )
+    fi
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
+
+    if [[ -r /etc/tinyssh/sshkeydir/ed25519.pk && -r /etc/tinyssh/sshkeydir/.ed25519.sk ]]; then
+        add_file /etc/tinyssh/sshkeydir/ed25519.pk
+        add_file /etc/tinyssh/sshkeydir/.ed25519.sk
+    elif [[ -r /etc/ssh/ssh_host_ed25519_key ]]; then
+	add_dir /etc/tinyssh
+        tinyssh-convert "$BUILDROOT/etc/tinyssh/sshkeydir" </etc/ssh/ssh_host_ed25519_key
+    else
+        error "Missing tinyssh host key"
+        return 1
+    fi
+
+    add_dir /root/.ssh
+    grep '^ssh-ed25519 ' /root/.ssh/authorized_keys >"$BUILDROOT/root/.ssh/authorized_keys"
+    if [[ ! -s "$BUILDROOT/root/.ssh/authorized_keys" ]]; then
+        error "No ED25519 key found for root"
+        return 1
+    fi
+
+    if [[ -z "$SD_TINYSSH_COMMAND" && -r "$SD_TINYSSH_SCRIPT" ]]; then
+        add_file "$SD_TINYSSH_SCRIPT" /root/.profile 600
+    fi
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables tinysshd with systemd initramfs.
+
+It copies all required files and binaries to initramfs and enables listening
+TCP port 22.  Host keys are copied either
+
+ o  from /etc/tinyssh/sshkeydir if they exist or
+
+ o  converted on the fly from the corresponding openssh ED25519 host key
+    /etc/ssh/ssh_host_ed25519_key. This requires python to be installed.
+
+If none of the two sources exist the hook aborts.
+
+By default tinyssh presents the busybox shell after successful login. Two
+variables can be used to alter this behavior:
+
+ o  SD_TINYSSH_COMMAND defines a shell command. The string is appended to
+    'sh -c', i.e. it may contain blanks, quotes and all kinds of special
+    characters that are interpreted by the shell.  Example: To allow to unlock
+    LUKS encrypted volumes from remote (but nothing else, especially no shell
+    access) set:
+    SD_TINYSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
+
+ o  SD_TINYSSH_SCRIPTS defines a file with shell commands that are executed
+    before the interactive shell is presented. Example: To allow to unlock LUKS
+    encrypted volumes from remote but also escape to an interactive shell with CTRL-C
+    specify a file that contains
+    systemd-tty-ask-password-agent --query --watch
+
+Only one of the two variables is taken into account. SD_TINYSSH_COMMAND takes
+precedence. The variables are supposed to be set in /etc/mkinitcpio.conf.
+__EOF_HELP__
+}
