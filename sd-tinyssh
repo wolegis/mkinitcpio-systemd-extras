@@ -84,7 +84,7 @@ variables can be used to alter this behavior:
     access) set:
     SD_TINYSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
 
- o  SD_TINYSSH_SCRIPTS defines a file with shell commands that are executed
+ o  SD_TINYSSH_SCRIPT defines a file with shell commands that are executed
     before the interactive shell is presented. Example: To allow to unlock LUKS
     encrypted volumes from remote but also escape to an interactive shell with CTRL-C
     specify a file that contains
