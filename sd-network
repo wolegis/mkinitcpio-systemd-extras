@@ -7,13 +7,14 @@ build() {
     add_symlink /etc/systemd/system/sysinit.target.wants/systemd-networkd.service \
                 /usr/lib/systemd/system/systemd-networkd.service
 
-    if [[ -d "$SD_NETWORK_CONFIG" ]]; then
-        add_dir /etc/systemd/network
-        tar --directory="$SD_NETWORK_CONFIG" --create --to-stdout . | \
-            tar --directory="$BUILDROOT/etc/systemd/network" --extract --file=-
-    else
-        add_full_dir /etc/systemd/network
+    SD_NETWORK_CONFIG="${SD_NETWORK_CONFIG:-/etc/systemd/network}"
+    if [[ ! -d "$SD_NETWORK_CONFIG" ]]; then
+        error "${SD_NETWORK_CONFIG} does not exist"
+        return 1
     fi
+
+    add_dir /etc/systemd/network
+    (cd "$SD_NETWORK_CONFIG"; cp -ra -t "$BUILDROOT/etc/systemd/network" .)
 
     add_checked_modules /drivers/net
 

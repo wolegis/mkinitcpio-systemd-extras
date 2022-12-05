@@ -7,19 +7,17 @@ build() {
     add_symlink /etc/systemd/system/sysinit.target.wants/systemd-resolved.service \
                 /usr/lib/systemd/system/systemd-resolved.service
 
-    if [[ -r "$SD_RESOLVE_CONFIG" ]]; then
-        add_file "$SD_RESOLVE_CONFIG" /etc/systemd/resolved.conf
-        if [[ -d "${SD_RESOLVE_CONFIG}.d" ]]; then
-            add_dir /etc/systemd/resolved.conf.d
-            tar --directory="${SD_RESOLVE_CONFIG}.d" --create --to-stdout . | \
-                tar --directory="$BUILDROOT/etc/systemd/resolved.conf.d" --extract --file=-
-        fi
-    else
-        add_file /etc/systemd/resolved.conf
-        if [[ -d /etc/systemd/resolved.conf.d ]]; then
-            add_full_dir /etc/systemd/resolved.conf.d
-        fi
+    SD_RESOLVE_CONFIG="${SD_RESOLVE_CONFIG:-/etc/systemd/resolved.conf}"
+    if [[ ! -r "$SD_RESOLVE_CONFIG" ]]; then
+        error "${SD_RESOLVE_CONFIG} does not exist"
+        return 1
     fi
+    add_file "$SD_RESOLVE_CONFIG" /etc/systemd/resolved.conf
+    if [[ -d "${SD_RESOLVE_CONFIG}.d" ]]; then
+        add_dir /etc/systemd/resolved.conf.d
+        (cd "${SD_RESOLVE_CONFIG}.d"; cp -ra -t "$BUILD_ROOT/etc/systemd/resolved.conf.d" .)
+    fi
+
     add_file /etc/hostname
     add_symlink /etc/resolv.conf /run/systemd/resolve/resolv.conf
     add_file /usr/lib/systemd/resolv.conf

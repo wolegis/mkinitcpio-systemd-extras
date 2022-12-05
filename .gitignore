@@ -2,3 +2,6 @@ aur
 TODO
 test-*
 wiki
+*.pkg.tar.zst
+pkg
+src
