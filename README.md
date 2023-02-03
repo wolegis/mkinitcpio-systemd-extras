@@ -36,7 +36,7 @@ See the short help available for each install hook, e.g.
 mkinitcpio -H sd-tinyssh
 ```
 
-For more details see the corresponding [wiki pages](wiki).
+For more details see the corresponding [wiki pages](../../wiki).
 
 ## Contribution
 
