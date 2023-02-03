@@ -1,7 +1,7 @@
 # mkinitcpio-systemd-extras
 
 This is a collection of `mkinitcpio` install hooks for systemd based
-initramsfs.
+initramfs.
 
 [mkinitcpio](https://wiki.archlinux.org/title/Mkinitcpio) is an Arch Linux
 specific tool to generate images for the [initial ramdisk
@@ -36,7 +36,7 @@ See the short help available for each install hook, e.g.
 mkinitcpio -H sd-tinyssh
 ```
 
-TODO: Wiki pages on GitHub. Alternatively in Arch Linux Wiki.
+For more details see the corresponding [wiki pages](wiki).
 
 ## Contribution
 
