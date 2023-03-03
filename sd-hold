@@ -1,0 +1,33 @@
+#!/bin/bash
+
+build() {
+    local service=(
+        "[Unit]"
+        "Description=Delay boot process until /etc/hold is deleted"
+        "DefaultDependencies=no"
+	"Before=sysinit.target"
+        ""
+        "[Service]"
+        "Type=forking"
+        "ExecStart=sh -c 'touch /etc/hold; while [ -f /etc/hold ]; do sleep 2; done'"
+        "TimeoutStartSec=infinity"
+    )
+    printf "%s\n" "${service[@]}" > ${BUILDROOT}/etc/systemd/system/hold.service
+
+    # enable hold service
+    add_symlink /etc/systemd/system/sysinit.target.requires/hold.service /usr/lib/systemd/system/hold.service
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables a service delaying boot until /etc/hold is deleted.
+
+This may come in handy in case you want to perform some action on your root
+file system (e.g. backup, encryption) without a running system already using
+this root file system.
+
+Mind that to proceed with the boot process you have to delete /etc/hold in your
+initramfs, i.e. some kind of access to the initramfs is required. The
+mkinitcpio hooks sd-tinyssh and sd-network enable access via SSH.
+__EOF_HELP__
+}
