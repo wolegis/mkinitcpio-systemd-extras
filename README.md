@@ -14,8 +14,10 @@ how this boot phase can be executed:
 * Systemd is started already in this initramfs environment and any
   initialization is performed by means of systemd units.
 
-This repository provides so-called install hooks that can be used in `mkinitcpio`'s
-configuration file `mkinitcpio.conf`.
+This repository provides so-called install hooks that can be used in
+`mkinitcpio`'s configuration file `mkinitcpio.conf`. They complement the set of
+install hooks for a systemd based boot process provided by other packages like
+e.g. *systemd*, *mkinitcpio*, *cryptsetup*, *lvm2*, ...
 
 *mkinitcpio-systemd-extras* is supposed to eventually become an alternative to
 [mkinitcpio-systemd-tool](https://github.com/random-archer/mkinitcpio-systemd-tool).
@@ -26,7 +28,7 @@ configuration file `mkinitcpio.conf`.
 [package](https://aur.archlinux.org/packages/mkinitcpio-systemd-extras) in Arch
 Linux' User Repository (AUR). Use `makepkg` to build and `pacman` to install
 the package.  (Alternatively you may use your favorite [AUR
-helper](https://wiki.archlinux.org/title/AUR_helpers).
+helper](https://wiki.archlinux.org/title/AUR_helpers).)
 
 ## Usage
 
