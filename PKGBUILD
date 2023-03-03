@@ -13,8 +13,10 @@ optdepends=('tinyssh: for sd-tinyssh'
 conflicts=('mkinitcpio-netconf' 'mkinitcpio-tinyssh')
 source=("sd-network"
         "sd-resolve"
-        "sd-tinyssh")
+        "sd-tinyssh"
+        "sd-hold")
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP')
 
