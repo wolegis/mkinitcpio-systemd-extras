@@ -14,34 +14,31 @@ build() {
 
     local drop_in=(
         '[Unit]'
-        'WantedBy=cryptsetup-pre.target'
-        'Before=cryptsetup-pre.target'
         'Requires=systemd-networkd.service'
         'After=systemd-networkd.service'
         'DefaultDependencies=no'
     )
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@22.socket override
 
+    local tinyssh_command="/usr/bin/tinysshd /etc/tinyssh/sshkeydir"
+    if [[ -n "$SD_TINYSSH_COMMAND" ]]; then
+        tinyssh_command="/usr/bin/tinysshd -e '${SD_TINYSSH_COMMAND}' /etc/tinyssh/sshkeydir"
+    fi
     drop_in=(
         '[Unit]'
         'DefaultDependencies=no'
+        ""
+        "[Service]"
+        'ExecStart='
+        "ExecStart=-${tinyssh_command}"
     )
-    if [[ -n "$SD_TINYSSH_COMMAND" ]]; then
-        drop_in=(
-            "${drop_in[@]}"
-            ""
-            "[Service]"
-            'ExecStart='
-            "ExecStart=/usr/bin/tinysshd -e '${SD_TINYSSH_COMMAND}' /etc/tinyssh/sshkeydir"
-        )
-    fi
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
 
     if [[ -r /etc/tinyssh/sshkeydir/ed25519.pk && -r /etc/tinyssh/sshkeydir/.ed25519.sk ]]; then
         add_file /etc/tinyssh/sshkeydir/ed25519.pk
         add_file /etc/tinyssh/sshkeydir/.ed25519.sk
     elif [[ -r /etc/ssh/ssh_host_ed25519_key ]]; then
-	add_dir /etc/tinyssh
+        add_dir /etc/tinyssh
         tinyssh-convert "$BUILDROOT/etc/tinyssh/sshkeydir" </etc/ssh/ssh_host_ed25519_key
     else
         error "Missing tinyssh host key"
