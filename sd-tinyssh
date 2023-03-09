@@ -20,17 +20,13 @@ build() {
     )
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@22.socket override
 
-    local tinyssh_command="/usr/bin/tinysshd /etc/tinyssh/sshkeydir"
-    if [[ -n "$SD_TINYSSH_COMMAND" ]]; then
-        tinyssh_command="/usr/bin/tinysshd -e '${SD_TINYSSH_COMMAND}' /etc/tinyssh/sshkeydir"
-    fi
     drop_in=(
-        '[Unit]'
-        'DefaultDependencies=no'
+        "[Unit]"
+        "DefaultDependencies=no"
         ""
         "[Service]"
-        'ExecStart='
-        "ExecStart=-${tinyssh_command}"
+        "ExecStart="
+        "ExecStart=-/usr/bin/tinysshd ${SD_TINYSSH_COMMAND:+-e '${SD_TINYSSH_COMMAND}' }/etc/tinyssh/sshkeydir"
     )
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
 
