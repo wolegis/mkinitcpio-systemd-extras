@@ -1,21 +1,24 @@
 # Maintainer:  Markus Hansmair <archlinux at zendro dot de>
 
 pkgname=mkinitcpio-systemd-extras
-pkgver=0.3pre
-pkgrel=1
+pkgver=0.4pre
+pkgrel=6
 pkgdesc="Manual testing of package mkinitcpio-systemd-extras"
 arch=('any')
 url="https://github.com/wolegis/mkinitcpio-systemd-extras"
 license=('GPL')
 depends=('mkinitcpio')
 optdepends=('tinyssh: for sd-tinyssh'
-            'python: for converting OpenSSH host keys to tinyssh format')
-conflicts=('mkinitcpio-netconf' 'mkinitcpio-tinyssh')
+            'python: for converting OpenSSH host keys to tinyssh format'
+            'dropbear: for sd-dropbear')
+conflicts=('mkinitcpio-netconf' 'mkinitcpio-tinyssh' 'mkinitcpio-dropbear')
 source=("sd-network"
         "sd-resolve"
         "sd-tinyssh"
+        "sd-dropbear"
         "sd-hold")
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP')

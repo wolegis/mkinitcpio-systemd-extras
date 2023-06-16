@@ -1,0 +1,112 @@
+#!/bin/bash
+
+build() {
+    if ! pacman -Qi dropbear >/dev/null 2>&1; then
+        error "package dropbear not installed"
+        return 1
+    fi
+
+    add_binary dropbear
+
+    local socket_unit=(
+        "[Unit]"
+        "Description=Dropbear SSH server socket"
+        "Documentation=https://man.archlinux.org/man/dropbear.8"
+        "Requires=systemd-networkd.service"
+        "After=systemd-networkd.service"
+        "DefaultDependencies=no"
+        ""
+        "[Socket]"
+        "ListenStream=%i"
+        "Accept=true"
+        "CollectMode=inactive-or-failed"
+        "KeepAlive=true"
+        "IPTOS=low-delay"
+        ""
+        "[Install]"
+        "WantedBy=sysinit.target"
+    )
+    printf "%s\n" "${socket_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.socket"
+
+    local service_unit=(
+        "[Unit]"
+        "Description=Dropbear SSH server (socket activated)"
+        "Documentation=https://man.archlinux.org/man/dropbear.8"
+        "DefaultDependencies=no"
+        ""
+        "[Service]"
+        "Type=exec"
+        "ExecStart=/usr/bin/dropbear ${SD_DROPBEAR_COMMAND:+-c '${SD_DROPBEAR_COMMAND}' }-i -s"
+        "StandardInput=socket"
+        "StandardOutput=socket"
+    )
+    printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.service"
+
+    # enable dropbear listening on TCP port 22
+    add_symlink /etc/systemd/system/sysinit.target.wants/dropbear@22.socket /usr/lib/systemd/system/dropbear@.socket
+
+    local host_key_file_count=0
+    for key_type in dss rsa ecdsa ed25519; do
+        if [[ -r "/etc/dropbear/dropbear_${key_type_}_host_key" ]]; then
+            add_file "/etc/dropbear/dropbear_${key_type}_host_key"
+            (( host_key_file_count++ ))
+        fi
+    done
+    if [[ "$host_key_file_count" == "0" ]]; then
+        for key_type in rsa ecdsa ed25519; do
+            if [[ -r "/etc/ssh/ssh_host_${key_type}_key" ]]; then
+                mkdir -p "$BUILDROOT/etc/dropbear"
+                dropbearconvert openssh dropbear "/etc/ssh/ssh_host_${key_type}_key" "$BUILDROOT/etc/dropbear/dropbear_${key_type}_host_key" 2> /dev/null
+                (( host_key_file_count++ ))
+            fi
+        done
+    fi
+    if [[ "$host_key_file_count" == "0" ]]; then
+        error "Missing SSH host keys"
+        return 1
+    fi
+
+    if [[ -n "$SD_DROPBEAR_AUTHORIZED_KEYS" ]]; then
+        add_file "$SD_DROPBEAR_AUTHORIZED_KEYS" /root/.ssh/authorized_keys 600
+    else
+        add_file /root/.ssh/authorized_keys
+    fi
+    chmod 700 "$BUILDROOT/root/.ssh"
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables dropbear SSH server within systemd initramfs.
+
+It copies all required files and binaries to initramfs and enables listening
+TCP port 22.  Host keys are either
+
+ o  copied from /etc/dropbear (if they exist) or
+
+ o  converted on the fly from the corresponding OpenSSH host keys.
+
+If none of the two sources exist the hook aborts.
+
+By default dropbear presents the busybox shell after successful login. This
+behavior can be overruled in two ways:
+
+ o  SD_DROPBEAR_COMMAND defines a shell command. The string is appended to 'sh
+    -c', i.e. it may contain blanks, quotes and all kinds of special characters
+    that are interpreted by the shell.  Example: To allow to unlock LUKS
+    encrypted volumes from remote (but nothing else, especially no shell
+    access) set:
+    SD_DROPBEAR_COMMAND="systemd-tty-ask-password-agent --query --watch"
+
+ o  Use option 'command=...' for the entry in /root/.ssh/authorized_keys that
+    contains the public key used to establish the SSH session. In the likely
+    case that this option is only desired for the 'authorized_keys' in the
+    initramfs you can set SD_DROPBEAR_AUTHORIZED_KEYS to specify a special
+    version of this file to be copied into the initramfs.
+    Example: To allow to unlock LUKS encrypted volumes from remote specify:
+    command="systemd-tty-ask-password-agent --query --watch" ....
+
+Mind that these two variables are not mutually exclusive. It's just that
+SD_DROPBEAR_COMMAND overrides all 'command=...' in authorized_keys (and all
+commands provided by a SSH client).
+__EOF_HELP__
+}
