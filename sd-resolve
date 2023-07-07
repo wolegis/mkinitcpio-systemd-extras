@@ -15,7 +15,7 @@ build() {
     add_file "$SD_RESOLVE_CONFIG" /etc/systemd/resolved.conf
     if [[ -d "${SD_RESOLVE_CONFIG}.d" ]]; then
         add_dir /etc/systemd/resolved.conf.d
-        (cd "${SD_RESOLVE_CONFIG}.d"; cp -ra -t "$BUILD_ROOT/etc/systemd/resolved.conf.d" .)
+        (cd "${SD_RESOLVE_CONFIG}.d"; cp -ra -t "$BUILDROOT/etc/systemd/resolved.conf.d" .)
     fi
 
     add_file /etc/hostname
