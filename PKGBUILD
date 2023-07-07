@@ -1,8 +1,8 @@
 # Maintainer:  Markus Hansmair <archlinux at zendro dot de>
 
 pkgname=mkinitcpio-systemd-extras
-pkgver=0.4pre
-pkgrel=6
+pkgver=0.5pre
+pkgrel=3
 pkgdesc="Manual testing of package mkinitcpio-systemd-extras"
 arch=('any')
 url="https://github.com/wolegis/mkinitcpio-systemd-extras"

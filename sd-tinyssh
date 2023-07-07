@@ -2,15 +2,23 @@
 
 build() {
     if ! pacman -Qi tinyssh >/dev/null 2>&1; then
-        error "package tinyssh not installed"
+        error "Package tinyssh not installed"
         return 1
     fi
 
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
 
-    # enable tinysshd listening on TCP port 22
-    add_symlink /etc/systemd/system/sysinit.target.wants/tinyssh@22.socket /usr/lib/systemd/system/tinyssh@.socket
+    # enable tinysshd listening on TCP port $SD_TINYSSH_PORT (if set to legal port number)
+    if [[ -n "$SD_TINYSSH_PORT" ]]; then
+        if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
+            error "Illegal port value '$SD_TINYSSH_PORT'"
+            return 1
+        fi
+    else
+        SD_TINYSSH_PORT=22
+    fi
+    add_symlink /etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket /usr/lib/systemd/system/tinyssh@.socket
 
     local drop_in=(
         '[Unit]'
@@ -18,7 +26,7 @@ build() {
         'After=systemd-networkd.service'
         'DefaultDependencies=no'
     )
-    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@22.socket override
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@$SD_TINYSSH_PORT.socket override
 
     drop_in=(
         "[Unit]"
@@ -41,9 +49,17 @@ build() {
         return 1
     fi
 
+    SD_TINYSSH_AUTHORIZED_KEYS=${SD_TINYSSH_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}
+    if [[ ! -r "$SD_TINYSSH_AUTHORIZED_KEYS" ]]; then
+        error "Keys file '$SD_TINYSSH_AUTHORIZED_KEYS' does not exist (or not readable)"
+        return 1
+    fi
     add_dir /root/.ssh
-    grep '^ssh-ed25519 ' /root/.ssh/authorized_keys >"$BUILDROOT/root/.ssh/authorized_keys"
-    if [[ ! -s "$BUILDROOT/root/.ssh/authorized_keys" ]]; then
+    grep '^ssh-ed25519 ' "$SD_TINYSSH_AUTHORIZED_KEYS" >"$BUILDROOT/root/.ssh/authorized_keys"
+    if [[ -s "$BUILDROOT/root/.ssh/authorized_keys" ]]; then
+        chmod 600 "$BUILDROOT/root/.ssh/authorized_keys"
+        chmod 700 "$BUILDROOT/root/.ssh"
+    else
         error "No ED25519 key found for root"
         return 1
     fi
@@ -65,7 +81,7 @@ TCP port 22.  Host keys are copied either
  o  converted on the fly from the corresponding openssh ED25519 host key
     /etc/ssh/ssh_host_ed25519_key. This requires python to be installed.
 
-If none of the two sources exist the hook aborts.
+If none of the two sources exists the hook aborts.
 
 By default tinyssh presents the busybox shell after successful login. Two
 variables can be used to alter this behavior:
@@ -84,6 +100,12 @@ variables can be used to alter this behavior:
     systemd-tty-ask-password-agent --query --watch
 
 Only one of the two variables is taken into account. SD_TINYSSH_COMMAND takes
-precedence. The variables are supposed to be set in /etc/mkinitcpio.conf.
+precedence.
+
+Set SD_TINYSSH_PORT to specify a port other than 22.
+
+Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than /root/.ssh/authorized_keys.
+
+The variables must be set somewhere in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }

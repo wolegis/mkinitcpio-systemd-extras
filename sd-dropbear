@@ -2,7 +2,7 @@
 
 build() {
     if ! pacman -Qi dropbear >/dev/null 2>&1; then
-        error "package dropbear not installed"
+        error "Package dropbear not installed"
         return 1
     fi
 
@@ -42,12 +42,20 @@ build() {
     )
     printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.service"
 
-    # enable dropbear listening on TCP port 22
-    add_symlink /etc/systemd/system/sysinit.target.wants/dropbear@22.socket /usr/lib/systemd/system/dropbear@.socket
+    # enable dropbeard listening on TCP port $SD_DROPBEAR_PORT (if set to legal port number)
+    if [[ -n "$SD_DROPBEAR_PORT" ]]; then
+        if (( SD_DROPBEAR_PORT < 1 || SD_DROPBEAR_PORT > 65535 )); then
+            error "Illegal port value '$SD_DROPBEAR_PORT'"
+            return 1
+        fi
+    else
+        SD_DROPBEAR_PORT=22
+    fi
+    add_symlink /etc/systemd/system/sysinit.target.wants/dropbear@$SD_DROPBEAR_PORT.socket /usr/lib/systemd/system/dropbear@.socket
 
     local host_key_file_count=0
     for key_type in dss rsa ecdsa ed25519; do
-        if [[ -r "/etc/dropbear/dropbear_${key_type_}_host_key" ]]; then
+        if [[ -r "/etc/dropbear/dropbear_${key_type}_host_key" ]]; then
             add_file "/etc/dropbear/dropbear_${key_type}_host_key"
             (( host_key_file_count++ ))
         fi
@@ -66,12 +74,14 @@ build() {
         return 1
     fi
 
-    if [[ -n "$SD_DROPBEAR_AUTHORIZED_KEYS" ]]; then
+    SD_DROPBEAR_AUTHORIZED_KEYS=${SD_DROPBEAR_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}
+    if [[ -r "$SD_DROPBEAR_AUTHORIZED_KEYS" ]]; then
         add_file "$SD_DROPBEAR_AUTHORIZED_KEYS" /root/.ssh/authorized_keys 600
+        chmod 700 "$BUILDROOT/root/.ssh"
     else
-        add_file /root/.ssh/authorized_keys
+        error "Keys file '$SD_DROPBEAR_AUTHORIZED_KEYS' does not exist (or not readable)"
+        return 1
     fi
-    chmod 700 "$BUILDROOT/root/.ssh"
 }
 
 help() {
@@ -85,7 +95,7 @@ TCP port 22.  Host keys are either
 
  o  converted on the fly from the corresponding OpenSSH host keys.
 
-If none of the two sources exist the hook aborts.
+If none of the two sources exists the hook aborts.
 
 By default dropbear presents the busybox shell after successful login. This
 behavior can be overruled in two ways:
@@ -108,5 +118,11 @@ behavior can be overruled in two ways:
 Mind that these two variables are not mutually exclusive. It's just that
 SD_DROPBEAR_COMMAND overrides all 'command=...' in authorized_keys (and all
 commands provided by a SSH client).
+
+Set SD_DROPBEAR_PORT to specify a port other than 22.
+
+Set SD_DROPBEAR_AUTHORIZED_KEYS to specify a keys file other than /root/.ssh/authorized_keys.
+
+The variables must be set somewhere in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }
