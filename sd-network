@@ -16,6 +16,11 @@ build() {
     add_dir /etc/systemd/network
     (cd "$SD_NETWORK_CONFIG"; cp -ra -t "$BUILDROOT/etc/systemd/network" .)
 
+    # add necessary udev rules to apply predictable interface names
+    add_udev_rule /usr/lib/udev/rules.d/75-net-description.rules
+    add_udev_rule /usr/lib/udev/rules.d/80-net-setup-link.rules
+    add_file /usr/lib/systemd/network/99-default.link
+
     add_checked_modules /drivers/net
 
     # systemd-networkd.service requires user systemd-network
@@ -29,9 +34,9 @@ help() {
 This hook allows for initial network setup with systemd initramfs.
 
 It copies all necessary files, binaries and drivers to the initramfs. It
-enables systemd-networkd.service. Network configuration is copied from
-/etc/systemd/network or from \$SD_NETWORK_CONFIG if this variable specifies an
-existing directory. SD_NETWORK_CONFIG is supposed to be set in
-/etc/mkinitcpio.conf.
+enables systemd-networkd.service. It includes udev rules to apply predictable
+interface names. Network configuration is copied from /etc/systemd/network or
+from \$SD_NETWORK_CONFIG if this variable specifies an existing directory.
+SD_NETWORK_CONFIG is supposed to be set in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }
