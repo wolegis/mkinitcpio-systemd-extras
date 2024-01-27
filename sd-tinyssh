@@ -6,6 +6,11 @@ build() {
         return 1
     fi
 
+    if [[ ! -e "$BUILDROOT/bin/busybox" ]]; then
+        error "'/bin/busybox' not found"
+        return 1
+    fi
+
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
 
@@ -73,17 +78,18 @@ help() {
     cat <<__EOF_HELP__
 This hook enables tinysshd with systemd initramfs.
 
-It copies all required files and binaries to initramfs and enables listening
-TCP port 22.  Host keys are copied either
+It copies all files and binaries required by tinyssh to initramfs and enables
+listening TCP port 22.  Host keys are copied either
 
  o  from /etc/tinyssh/sshkeydir if they exist or
 
  o  converted on the fly from the corresponding openssh ED25519 host key
     /etc/ssh/ssh_host_ed25519_key. This requires python to be installed.
 
-If none of the two sources exists the hook aborts.
+If none of the two sources exists the hook aborts.  Also if the hook 'base' is
+missing this hook will throw an error.
 
-By default tinyssh presents the busybox shell after successful login. Two
+By default tinyssh presents the busybox shell after successful login.  Two
 variables can be used to alter this behavior:
 
  o  SD_TINYSSH_COMMAND defines a shell command. The string is appended to
