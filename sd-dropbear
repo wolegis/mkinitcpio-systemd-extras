@@ -6,6 +6,14 @@ build() {
         return 1
     fi
 
+    # make sure sh is present
+    # (other busybox applets are added also because they allocate nearly no space in initramfs)
+    add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+    local applet
+    for applet in $(/usr/lib/initcpio/busybox --list); do
+        add_symlink "/usr/bin/$applet" busybox
+    done
+
     add_binary dropbear
 
     local socket_unit=(

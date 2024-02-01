@@ -6,6 +6,14 @@ build() {
         return 1
     fi
 
+    # make sure sh is present
+    # (other busybox applets are added also because they allocate nearly no space in initramfs)
+    add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+    local applet
+    for applet in $(/usr/lib/initcpio/busybox --list); do
+        add_symlink "/usr/bin/$applet" busybox
+    done
+
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
 
@@ -73,10 +81,10 @@ help() {
     cat <<__EOF_HELP__
 This hook enables tinysshd with systemd initramfs.
 
-It copies all required files and binaries to initramfs and enables listening
-TCP port 22.  Host keys are copied either
+It copies all files and binaries required by tinyssh to initramfs and enables
+listening TCP port 22.  Host keys are either
 
- o  from /etc/tinyssh/sshkeydir if they exist or
+ o  copied from /etc/tinyssh/sshkeydir if they exist or
 
  o  converted on the fly from the corresponding openssh ED25519 host key
     /etc/ssh/ssh_host_ed25519_key. This requires python to be installed.
