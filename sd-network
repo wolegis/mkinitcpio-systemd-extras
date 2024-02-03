@@ -14,7 +14,12 @@ build() {
     fi
 
     add_dir /etc/systemd/network
-    (cd "$SD_NETWORK_CONFIG"; cp -ra -t "$BUILDROOT/etc/systemd/network" .)
+    local exclude filter=()
+    for exclude in "${SD_NETWORK_EXCLUDES[@]}"; do
+        filter+=("!" "-name" "$exclude")
+    done
+    find "$SD_NETWORK_CONFIG" -depth -type f "${filter[@]}" | sed -e "s|^${SD_NETWORK_CONFIG}/||" |
+        cpio --pass-through --quiet --directory "$SD_NETWORK_CONFIG" --make-directories "$BUILDROOT/etc/systemd/network"
 
     add_checked_modules /drivers/net
 
@@ -31,8 +36,12 @@ This hook allows for initial network setup with systemd initramfs.
 It copies all files, binaries and drivers required by systemd-networkd to the
 initramfs and enables systemd-networkd.service. Network configuration is copied
 from /etc/systemd/network or from \$SD_NETWORK_CONFIG if this variable
-specifies an existing directory. SD_NETWORK_CONFIG must be set in
-/etc/mkinitcpio.conf.
+specifies an existing directory. With the array SD_NETWORK_EXCLUDES you can
+exclude certain configuration files from being copied into initramfs. Specify
+globs (e.g. "wd*") or filenames. Always put them in quotes to prevent undesired
+behaviour.
+
+SD_NETWORK_CONFIG and SD_NET_EXCLUDES must be set in /etc/mkinitcpio.conf.
 
 See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Networking for
 details, especially about how to deal with network interface names differing
