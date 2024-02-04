@@ -2,7 +2,7 @@
 
 pkgname=mkinitcpio-systemd-extras
 pkgver=0.5.4pre
-pkgrel=2
+pkgrel=3
 pkgdesc="Manual testing of package mkinitcpio-systemd-extras"
 arch=('any')
 url="https://github.com/wolegis/mkinitcpio-systemd-extras"
