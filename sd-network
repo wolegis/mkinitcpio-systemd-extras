@@ -13,13 +13,14 @@ build() {
         return 1
     fi
 
-    add_dir /etc/systemd/network
-    local exclude filter=()
+    local exclude filter=() file
     for exclude in "${SD_NETWORK_EXCLUDES[@]}"; do
         filter+=("!" "-name" "$exclude")
     done
-    find "$SD_NETWORK_CONFIG" -depth -type f "${filter[@]}" | sed -e "s|^${SD_NETWORK_CONFIG}/||" |
-        cpio --pass-through --quiet --directory "$SD_NETWORK_CONFIG" --make-directories "$BUILDROOT/etc/systemd/network"
+    for file in $(find "$SD_NETWORK_CONFIG" -depth -type f "${filter[@]}" | sed -e "s|^${SD_NETWORK_CONFIG}/||"); do
+        mkdir -p "$BUILDROOT/etc/systemd/network/$(dirname "$file")"
+        cp -a "$SD_NETWORK_CONFIG/$file" "$BUILDROOT/etc/systemd/network/$file"
+    done
 
     add_checked_modules /drivers/net
 
