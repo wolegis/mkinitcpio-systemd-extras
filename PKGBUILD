@@ -2,12 +2,12 @@
 
 pkgname=mkinitcpio-systemd-extras
 pkgver=0.5.2pre
-pkgrel=3
+pkgrel=4
 pkgdesc="Manual testing of package mkinitcpio-systemd-extras"
 arch=('any')
 url="https://github.com/wolegis/mkinitcpio-systemd-extras"
 license=('GPL')
-depends=('mkinitcpio')
+depends=('mkinitcpio' 'cpio')
 makedepends=('git')
 optdepends=('tinyssh: for sd-tinyssh'
             'python: for converting OpenSSH host keys to tinyssh format'
