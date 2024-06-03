@@ -9,7 +9,7 @@ build() {
 
     SD_NETWORK_CONFIG="${SD_NETWORK_CONFIG:-/etc/systemd/network}"
     if [[ ! -d "$SD_NETWORK_CONFIG" ]]; then
-        error "${SD_NETWORK_CONFIG} does not exist"
+        error "${SD_NETWORK_CONFIG} is not a directory or does not exist"
         return 1
     fi
 
