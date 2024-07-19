@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+build() {
+    if ! pacman -Qi clevis >/dev/null 2>&1; then
+        error "Package clevis not installed"
+        return 1
+    fi
+
+    add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+    local applet
+    for applet in $(/usr/lib/initcpio/busybox --list); do
+        add_symlink "/usr/bin/$applet" busybox
+    done
+
+    add_binary bash
+    add_binary jose
+    add_binary curl
+    add_binary cryptsetup
+    add_binary sed
+    add_binary grep
+    add_binary tr
+
+    if ! pacman -Qi tpm2-tools >/dev/null 2>&1; then
+        warning "Package tpm2-tools not installed. Unlocking via tpm2 will not work"
+    else
+        add_binary "tpm2_createprimary"
+        add_binary "tpm2_load"
+        add_binary "tpm2_unseal"
+        add_binary "tpm2_flushcontext"
+        for _LIBRARY in /usr/lib/libtss2-tcti-device.so*; do
+            if [ -e "${_LIBRARY}" ]; then
+                add_binary "${_LIBRARY}"
+            fi
+        done
+    fi
+
+    local bin
+    for bin in /usr/bin/clevis*; do
+        add_binary $bin
+    done
+
+    add_file /usr/lib/systemd/systemd-reply-password
+
+    add_systemd_unit clevis-luks-askpass.service
+    add_systemd_unit clevis-luks-askpass.path
+    add_symlink /etc/systemd/system/sysinit.target.wants/clevis-luks-askpass.path \
+                /usr/lib/systemd/system/clevis-luks-askpass.path
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook allows for unlocking an encrypted root volume with clevis. tang and
+tpm2 bound volumes are supported.
+
+The hook must be placed after sd-network (in case a tang binding is used) and
+before sd-encrypt.
+__EOF_HELP__
+}
+
