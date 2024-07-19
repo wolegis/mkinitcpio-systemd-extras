@@ -54,7 +54,8 @@ build() {
 help() {
     cat <<__EOF_HELP__
 This hook allows for unlocking an encrypted root volume with clevis. tang and
-tpm2 bound volumes are supported.
+tpm2 bound volumes are supported. It is meant to be used in conjunction with
+sd-encrypt.
 
 The hook must be placed after sd-tinyssh and sd-dropbear, because of its
 dependency on grep -B, which is not supported by busybox's grep used in those
