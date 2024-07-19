@@ -12,8 +12,7 @@ makedepends=('git')
 optdepends=('tinyssh: for sd-tinyssh'
             'python: for converting OpenSSH host keys to tinyssh format'
             'dropbear: for sd-dropbear'
-            'clevis: for unlocking your luks encrypted root volume with clevis (tang + tpm2)'
-            'tpm2-tools: for unlocking your luks encrypted root volume with clevis (only tpm2)')
+            'clevis: for sd-clevis, unlocking your luks encrypted root volume with clevis (tang or tpm2 supported)')
 conflicts=('mkinitcpio-netconf' 'mkinitcpio-tinyssh' 'mkinitcpio-dropbear')
 source=("sd-network"
         "sd-resolve"
