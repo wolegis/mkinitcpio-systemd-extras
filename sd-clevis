@@ -6,6 +6,7 @@ build() {
         return 1
     fi
 
+    # dependencies
     add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
     local applet
     for applet in $(/usr/lib/initcpio/busybox --list); do
@@ -19,24 +20,28 @@ build() {
     add_binary grep
     add_binary tr
 
+    # clevis with tang server
+    add_binary clevis
+    add_binary clevis-luks-common-functions
+    add_binary clevis-luks-unlock
+    add_binary clevis-decrypt
+    add_binary clevis-decrypt-tang
+
+    # clevis with tpm2
     if ! pacman -Qi tpm2-tools >/dev/null 2>&1; then
         warning "Package tpm2-tools not installed. Unlocking via tpm2 will not work"
     else
-        add_binary "tpm2_createprimary"
-        add_binary "tpm2_load"
-        add_binary "tpm2_unseal"
-        add_binary "tpm2_flushcontext"
+        add_binary tpm2_createprimary
+        add_binary tpm2_load
+        add_binary tpm2_unseal
+        add_binary tpm2_flushcontext
+        add_binary clevis-decrypt-tpm2
 
         local libtss2
         for libtss2 in /usr/lib/libtss2-tcti-device.so*; do
             add_binary "${libtss2}"
         done
     fi
-
-    local clevisbin
-    for clevisbin in /usr/bin/clevis*; do
-        add_binary $clevisbin
-    done
 
     add_file /usr/lib/systemd/systemd-reply-password
 
