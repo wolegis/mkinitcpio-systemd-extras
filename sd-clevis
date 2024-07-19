@@ -57,7 +57,8 @@ This hook allows for unlocking an encrypted root volume with clevis. tang and
 tpm2 bound volumes are supported.
 
 The hook must be placed after sd-tinyssh and sd-dropbear, because of its
-dependency on grep -B, which is not supported by busybox used in those hooks.
+dependency on grep -B, which is not supported by busybox's grep used in those
+hooks.
 __EOF_HELP__
 }
 
