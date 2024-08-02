@@ -14,7 +14,7 @@ build() {
     pacman -Qi tpm2-tools >/dev/null 2>&1 && local HAS_TPM2=true
 
     # common files
-    if [[ -n "$HAS_CURL" ]] && [[ -n "$HAS_TPM2" ]]; then
+    if [[ -n "$HAS_CURL" ]] || [[ -n "$HAS_TPM2" ]]; then
         # dependencies
         add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
         local applet
