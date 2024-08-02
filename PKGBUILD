@@ -2,7 +2,7 @@
 
 pkgname=mkinitcpio-systemd-extras
 pkgver=0.5.4pre
-pkgrel=3
+pkgrel=4
 pkgdesc="Manual testing of package mkinitcpio-systemd-extras"
 arch=('any')
 url="https://github.com/wolegis/mkinitcpio-systemd-extras"
@@ -11,14 +11,17 @@ depends=('mkinitcpio')
 makedepends=('git')
 optdepends=('tinyssh: for sd-tinyssh'
             'python: for converting OpenSSH host keys to tinyssh format'
-            'dropbear: for sd-dropbear')
+            'dropbear: for sd-dropbear'
+            'clevis: for sd-clevis, unlocking your luks encrypted root volume with clevis (tang or tpm2 supported)')
 conflicts=('mkinitcpio-netconf' 'mkinitcpio-tinyssh' 'mkinitcpio-dropbear')
 source=("sd-network"
         "sd-resolve"
         "sd-tinyssh"
         "sd-dropbear"
-        "sd-hold")
+        "sd-hold"
+        "sd-clevis")
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
