@@ -11,14 +11,17 @@ depends=('mkinitcpio')
 makedepends=('git')
 optdepends=('tinyssh: for sd-tinyssh'
             'python: for converting OpenSSH host keys to tinyssh format'
-            'dropbear: for sd-dropbear')
+            'dropbear: for sd-dropbear'
+            'nftables: for sd-nftables')
 conflicts=('mkinitcpio-netconf' 'mkinitcpio-tinyssh' 'mkinitcpio-dropbear')
 source=("sd-network"
         "sd-resolve"
         "sd-tinyssh"
         "sd-dropbear"
-        "sd-hold")
+        "sd-hold"
+        "sd-nftables")
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
