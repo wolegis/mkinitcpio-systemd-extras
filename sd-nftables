@@ -1,0 +1,56 @@
+#!/bin/bash
+
+build() {
+    if ! pacman -Qi nftables >/dev/null 2>&1; then
+        error "Package nftables not installed"
+        return 1
+    fi
+
+    SD_NFTABLES_CONFIG="${SD_NFTABLES_CONFIG:-/etc/nftables.conf}"
+    if [[ ! -f "$SD_NFTABLES_CONFIG" ]]; then
+        error "${SD_NFTABLES_CONFIG} is not a file or does not exist"
+        return 1
+    fi
+
+    add_file "$SD_NFTABLES_CONFIG" /etc/nftables.conf
+
+    add_systemd_unit network-pre.target
+    add_systemd_unit nftables.service
+
+    drop_in=(
+        "[Unit]"
+        "DefaultDependencies=no"
+    )
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in nftables.service override
+
+    # enable nftables.service
+    add_symlink /etc/systemd/system/sysinit.target.wants/nftables.service \
+        /usr/lib/systemd/systemd/nftables.service
+
+    # needed to support port names in rules
+    if [[ -f /etc/services ]]; then
+        add_file /etc/services
+    fi
+
+    add_binary /usr/bin/nft
+    add_all_modules /net/bridge/netfilter
+    add_all_modules /net/ipv4/netfilter
+    add_all_modules /net/ipv6/netfilter
+    add_all_modules /net/netfilter
+    add_module br_netfilter
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables netfilter capability with nftables during early boot.
+
+It copies all the required files, binaries, and modules to initramfs and
+enables nftables.service. Configuration is copied either
+
+ o  from /etc/nftables.conf or
+
+ o  from \$SD_NFTABLES_CONFIG in case this is a readable file.
+
+SD_NFTABLES_CONFIG is supposed to be set in /etc/mkinitcpio.conf
+__EOF_HELP__
+}
