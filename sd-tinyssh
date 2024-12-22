@@ -20,7 +20,7 @@ build() {
     # enable tinysshd listening on TCP port $SD_TINYSSH_PORT (if set to legal port number)
     if [[ -n "$SD_TINYSSH_PORT" ]]; then
         if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
-            error "Illegal port value '$SD_TINYSSH_PORT'"
+            error "Illegal value SD_TINYSSH_PORT=$SD_TINYSSH_PORT"
             return 1
         fi
     else

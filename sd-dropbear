@@ -53,7 +53,7 @@ build() {
     # enable dropbeard listening on TCP port $SD_DROPBEAR_PORT (if set to legal port number)
     if [[ -n "$SD_DROPBEAR_PORT" ]]; then
         if (( SD_DROPBEAR_PORT < 1 || SD_DROPBEAR_PORT > 65535 )); then
-            error "Illegal port value '$SD_DROPBEAR_PORT'"
+            error "Illegal value SD_DROPBEAR_PORT=$SD_DROPBEAR_PORT"
             return 1
         fi
     else
