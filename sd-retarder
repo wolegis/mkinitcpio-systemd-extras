@@ -1,22 +1,29 @@
 #!/usr/bin/bash
 
 build() {
-    if [[ -n "$SD_RETARD_SECONDS" ]]; then
-        if (( SD_RETARD_SECONDS < 1 || SD_RETARD_SECONDS > 600 )); then
-            error "Illegal value SD_RETARD_SECONDS=$SD_RETARD_SECONDS"
-            return 1
-        fi
-    else
-        SD_RETARD_SECONDS=20
+    SD_RETARD_SECONDS="${SD_RETARD_SECONDS:-20}"
+    if (( SD_RETARD_SECONDS < 1 || SD_RETARD_SECONDS > 600 )); then
+        error "Illegal value SD_RETARD_SECONDS=$SD_RETARD_SECONDS"
+        return 1
+    fi
+
+    SD_RETARD_SSH_SERVICE="${SD_RETARD_SSH_SERVICE:-tinyssh}"
+    local unit_name_pattern='^[-a-zA-Z0-9:_.]+$'
+    if [[ ! "$SD_RETARD_SSH_SERVICE" =~ $unit_name_pattern ]]; then
+        error "Illegal value SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE"
+        return 1
+    fi
+    if [[ "$SD_RETARD_SSH_SERVICE" != "tinyssh" && "$SD_RETARD_SSH_SERVICE" != "dropbear" ]]; then
+        warning "Not one of the recommended SSH services 'tinyssh' or 'dropbear' SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE"
     fi
 
     local script=(
         "count=$SD_RETARD_SECONDS;"
-        'while [ $count -gt 0 ] && ! systemctl show tinyssh@*.service | grep -q "^ActiveState=active$"; do'
+        'while [ $count -gt 0 ] && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
             'sleep 1;'
             'let --count;'
         'done;'
-        'while systemctl show tinyssh@*.service | grep -q "^ActiveState=active$"; do'
+        'while systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
             'sleep 1;'
         'done'
     )
