@@ -6,13 +6,15 @@ build() {
         return 1
     fi
 
-    # make sure sh is present
+    # make sure busybox (and thus sh) are present
     # (other busybox applets are added also because they allocate nearly no space in initramfs)
-    add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
-    local applet
-    for applet in $(/usr/lib/initcpio/busybox --list); do
-        add_symlink "/usr/bin/$applet" busybox
-    done
+    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
+        add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+        local applet
+        for applet in $(/usr/lib/initcpio/busybox --list); do
+            add_symlink "/usr/bin/$applet" busybox
+        done
+    fi
 
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
