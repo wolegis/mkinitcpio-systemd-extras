@@ -7,54 +7,56 @@ build() {
     fi
 
     # check for optional dependencies to determine if tpm2 or tang unlocking
-    # should be used:
+    # can be used:
     ## tang
-    which curl >/dev/null 2>&1 && local HAS_CURL=true
+    local has_curl=""
+    pacman -Qi curl >/dev/null 2>&1 && has_curl=true
     ## tpm2
-    pacman -Qi tpm2-tools >/dev/null 2>&1 && local HAS_TPM2=true
+    local has_tpm2=""
+    pacman -Qi tpm2-tools >/dev/null 2>&1 && has_tpm2=true
+
+    if [[ ! "$has_curl" && ! "$has_curl" ]]; then
+        error "Neither curl nor tpm2-tools installed. This will not work"
+        return 1
+    fi
 
     # common files
-    if [[ -n "$HAS_CURL" ]] || [[ -n "$HAS_TPM2" ]]; then
-        # dependencies
+    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
         add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
         local applet
         for applet in $(/usr/lib/initcpio/busybox --list); do
             add_symlink "/usr/bin/$applet" busybox
         done
-
-        add_binary bash
-        add_binary jose
-        add_binary cryptsetup
-        add_binary grep
-        add_binary tr
-
-        # clevis
-        add_binary clevis
-        add_binary clevis-luks-common-functions
-        add_binary clevis-luks-unlock
-        add_binary clevis-decrypt
-
-        add_file /usr/lib/systemd/systemd-reply-password
-
-        add_systemd_unit clevis-luks-askpass.service
-        add_systemd_unit clevis-luks-askpass.path
-        add_symlink /etc/systemd/system/sysinit.target.wants/clevis-luks-askpass.path \
-                    /usr/lib/systemd/system/clevis-luks-askpass.path
-    else
-        error "Neither curl nor tpm2-tools found. This hook will do nothing"
-        return 1
     fi
+    add_binary bash
+    add_binary jose
+    add_binary cryptsetup
+    add_binary grep /usr/local/bin
+    add_binary tr
+
+    # clevis
+    add_binary clevis
+    add_binary clevis-luks-common-functions
+    add_binary clevis-luks-unlock
+    add_binary clevis-decrypt
+
+    add_file /usr/lib/systemd/systemd-reply-password
+
+    add_systemd_unit clevis-luks-askpass.service
+    add_systemd_unit clevis-luks-askpass.path
+    add_symlink /etc/systemd/system/sysinit.target.wants/clevis-luks-askpass.path \
+                /usr/lib/systemd/system/clevis-luks-askpass.path
 
     # unlock with tang
-    if [[ -n "$HAS_CURL" ]]; then
+    if [[ "$has_curl" ]]; then
         add_binary curl
         add_binary clevis-decrypt-tang
     else
-        warning "curl not found. Unlocking via tang will not work"
+        warning "Package curl not installed. Unlocking with tang will not work"
     fi
 
     # unlock with tpm2
-    if [[ -n "$HAS_TPM2" ]]; then
+    if [[ "$has_tpm2" ]]; then
         add_binary tpm2_createprimary
         add_binary tpm2_load
         add_binary tpm2_unseal
@@ -62,20 +64,16 @@ build() {
         add_binary clevis-decrypt-tpm2
         add_full_dir /usr/lib libtss2-tcti-device.so
     else
-        warning "Package tpm2-tools not installed. Unlocking via tpm2 will not work"
+        warning "Package tpm2-tools not installed. Unlocking with tpm2 will not work"
     fi
 
 }
 
 help() {
     cat <<__EOF_HELP__
-This hook allows for unlocking an encrypted root volume with clevis. tang and
-tpm2 bound volumes are supported. It is meant to be used in conjunction with
-sd-encrypt.
-
-The hook must be placed after sd-tinyssh and sd-dropbear, because of its
-dependency on grep -B, which is not supported by busybox's grep used in those
-hooks.
+This hook allows unlocking encrypted volumes (even root) with clevis. tang and
+tpm2 bound volumes are supported. Mind that this hooks only works in
+conjunction with sd-encrypt.
 __EOF_HELP__
 }
 
