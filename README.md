@@ -19,8 +19,9 @@ This repository provides so-called install hooks that can be used in
 install hooks for a systemd based boot process provided by other packages like
 e.g. *systemd*, *mkinitcpio*, *cryptsetup*, *lvm2*, ...
 
-*mkinitcpio-systemd-extras* is supposed to eventually become an alternative to
-[mkinitcpio-systemd-tool](https://github.com/random-archer/mkinitcpio-systemd-tool).
+> [!CAUTION]
+> Tinkering with the boot process of your system is always risky.  Make sure
+> that you always have at least one option to back out.
 
 ## Installation
 
@@ -42,6 +43,6 @@ For more details see the corresponding [wiki pages](../../wiki).
 
 ## Contribution
 
-This project is in a very early stage. You are welcome to provide additional
-hooks or improvements of the existing ones in the form of pull requests. Mind
-that all hooks must provide some degree of general usefulness.
+You are welcome to provide additional hooks or improvements of the existing
+ones in the form of pull requests. Mind that all hooks must provide some degree
+of general usefulness.

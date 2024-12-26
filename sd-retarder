@@ -1,0 +1,62 @@
+#!/usr/bin/bash
+
+build() {
+    if [[ -n "$SD_RETARD_SECONDS" ]]; then
+        if (( SD_RETARD_SECONDS < 1 || SD_RETARD_SECONDS > 600 )); then
+            error "Illegal value SD_RETARD_SECONDS=$SD_RETARD_SECONDS"
+            return 1
+        fi
+    else
+        SD_RETARD_SECONDS=20
+    fi
+
+    local script=(
+        "count=$SD_RETARD_SECONDS;"
+        'while [ $count -gt 0 ] && ! systemctl show tinyssh@*.service | grep -q "^ActiveState=active$"; do'
+            'sleep 1;'
+            'let --count;'
+        'done;'
+        'while systemctl show tinyssh@*.service | grep -q "^ActiveState=active$"; do'
+            'sleep 1;'
+        'done'
+    )
+    local service=(
+        "[Unit]"
+        "Description=Retarder service ('Started' means retardation finished)"
+        "DefaultDependencies=no"
+	"Before=sysinit.target"
+        ""
+        "[Service]"
+        "Type=forking"
+        "ExecStart=sh -c '${script[*]}'"
+        "TimeoutStartSec=infinity"
+    )
+    printf "%s\n" "${service[@]}" > ${BUILDROOT}/etc/systemd/system/retarder.service
+
+    # enable retarder service
+    add_symlink /etc/systemd/system/sysinit.target.requires/retarder.service /usr/lib/systemd/system/retarder.service
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables a service retarding boot
+
+ o  for a certain period of time (default 20 seconds) or
+
+ o  until all SSH sessions have been terminated.
+
+(Whatever happens first).
+
+This way it is possible to automatically boot to the regular Linux system
+without user intervention, while still being able to log into the preliminary
+Linux of initramfs and perform arbitrary actions (e.g. backup, decryption).
+
+By default the duration of the initramfs phase is extended to approx. 20
+seconds.  This value can be set by SD_RETARD_SECONDS.
+
+The SSH servers supported are TinySSH and Dropbear. TinySSH is default.
+Dropbear can be used by setting SD_RETARD_SSH_SERVICE=dropbear. Any service
+name other than dropbear or tinyssh is tolerated but produces a warning. Your
+mileage may vary.
+__EOF_HELP__
+}
