@@ -7,6 +7,7 @@ build() {
     fi
 
     # make sure busybox (and thus sh) are present
+    # (might have been already installed by some other hook, e.g. base)
     # (other busybox applets are added also because they allocate nearly no space in initramfs)
     if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
         add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
@@ -20,13 +21,10 @@ build() {
     add_systemd_unit tinyssh@.service
 
     # enable tinysshd listening on TCP port $SD_TINYSSH_PORT (if set to legal port number)
-    if [[ -n "$SD_TINYSSH_PORT" ]]; then
-        if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
-            error "Illegal value SD_TINYSSH_PORT=$SD_TINYSSH_PORT"
-            return 1
-        fi
-    else
-        SD_TINYSSH_PORT=22
+    SD_TINYSSH_PORT=${SD_TINYSSH_PORT:-22}
+    if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
+        error "Illegal value SD_TINYSSH_PORT=$SD_TINYSSH_PORT"
+        return 1
     fi
     add_symlink /etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket /usr/lib/systemd/system/tinyssh@.socket
 

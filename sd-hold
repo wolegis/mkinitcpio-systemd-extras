@@ -1,6 +1,17 @@
 #!/bin/bash
 
 build() {
+    # make sure busybox (and thus sh) are present
+    # (might have been already installed by some other hook, e.g. base)
+    # (other busybox applets are added also because they allocate nearly no space in initramfs)
+    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
+        add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+        local applet
+        for applet in $(/usr/lib/initcpio/busybox --list); do
+            add_symlink "/usr/bin/$applet" busybox
+        done
+    fi
+
     local service=(
         "[Unit]"
         "Description=Delay boot process until /etc/hold is deleted"

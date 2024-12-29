@@ -17,6 +17,17 @@ build() {
         warning "Not one of the recommended SSH services 'tinyssh' or 'dropbear' SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE"
     fi
 
+    # make sure busybox (and thus sh) are present
+    # (might have been already installed by some other hook, e.g. base)
+    # (other busybox applets are added also because they allocate nearly no space in initramfs)
+    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
+        add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+        local applet
+        for applet in $(/usr/lib/initcpio/busybox --list); do
+            add_symlink "/usr/bin/$applet" busybox
+        done
+    fi
+
     local script=(
         "count=$SD_RETARD_SECONDS;"
         'while [ $count -gt 0 ] && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
@@ -48,11 +59,9 @@ help() {
     cat <<__EOF_HELP__
 This hook enables a service retarding boot
 
- o  for a certain period of time (default 20 seconds) or
+ o  for at least a certain period of time (default 20 seconds) and
 
  o  until all SSH sessions have been terminated.
-
-(Whatever happens first).
 
 This way it is possible to automatically boot to the regular Linux system
 without user intervention, while still being able to log into the preliminary

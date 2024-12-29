@@ -20,7 +20,9 @@ build() {
         return 1
     fi
 
-    # common files
+    # make sure busybox (and thus sh) are present
+    # (might have been already installed by some other hook, e.g. base)
+    # (other busybox applets are added also because they allocate nearly no space in initramfs)
     if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
         add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
         local applet
@@ -28,6 +30,8 @@ build() {
             add_symlink "/usr/bin/$applet" busybox
         done
     fi
+
+    # common files
     add_binary bash
     add_binary jose
     add_binary cryptsetup

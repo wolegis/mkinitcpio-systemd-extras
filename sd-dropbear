@@ -7,6 +7,7 @@ build() {
     fi
 
     # make sure busybox (and thus sh) are present
+    # (might have been already installed by some other hook, e.g. base)
     # (other busybox applets are added also because they allocate nearly no space in initramfs)
     if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
         add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
@@ -53,13 +54,10 @@ build() {
     printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.service"
 
     # enable dropbeard listening on TCP port $SD_DROPBEAR_PORT (if set to legal port number)
-    if [[ -n "$SD_DROPBEAR_PORT" ]]; then
-        if (( SD_DROPBEAR_PORT < 1 || SD_DROPBEAR_PORT > 65535 )); then
-            error "Illegal value SD_DROPBEAR_PORT=$SD_DROPBEAR_PORT"
-            return 1
-        fi
-    else
-        SD_DROPBEAR_PORT=22
+    SD_DROPBEAR_PORT=${SD_DROPBEAR_PORT:-22}
+    if (( SD_DROPBEAR_PORT < 1 || SD_DROPBEAR_PORT > 65535 )); then
+        error "Illegal value SD_DROPBEAR_PORT=$SD_DROPBEAR_PORT"
+        return 1
     fi
     add_symlink /etc/systemd/system/sysinit.target.wants/dropbear@$SD_DROPBEAR_PORT.socket /usr/lib/systemd/system/dropbear@.socket
 
