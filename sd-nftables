@@ -17,7 +17,7 @@ build() {
     add_systemd_unit network-pre.target
     add_systemd_unit nftables.service
 
-    drop_in=(
+    local drop_in=(
         "[Unit]"
         "DefaultDependencies=no"
     )
@@ -47,10 +47,10 @@ This hook enables netfilter capability with nftables during early boot.
 It copies all the required files, binaries, and modules to initramfs and
 enables nftables.service. Configuration is copied either
 
- o  from /etc/nftables.conf or
+ o  from the file specified by \$SD_NFTABLES_CONFIG or
 
- o  from \$SD_NFTABLES_CONFIG in case this is a readable file.
+ o  from /etc/nftables.conf (in case \$SD_NFTABLES_CONFIG has not been set).
 
-SD_NFTABLES_CONFIG is supposed to be set in /etc/mkinitcpio.conf
+SD_NFTABLES_CONFIG is supposed to be set in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }
