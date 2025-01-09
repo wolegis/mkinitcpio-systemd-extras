@@ -55,6 +55,7 @@ build() {
     if [[ "$has_curl" ]]; then
         add_binary curl
         add_binary clevis-decrypt-tang
+        add_file /etc/ssl/certs/ca-certificates.crt
     else
         warning "Package curl not installed. Unlocking with tang will not work"
     fi
