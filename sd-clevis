@@ -43,6 +43,7 @@ build() {
     add_binary clevis-luks-common-functions
     add_binary clevis-luks-unlock
     add_binary clevis-decrypt
+    add_binary clevis-decrypt-sss
 
     add_file /usr/lib/systemd/systemd-reply-password
 
