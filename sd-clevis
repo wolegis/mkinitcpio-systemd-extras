@@ -68,7 +68,7 @@ build() {
         add_binary tpm2_unseal
         add_binary tpm2_flushcontext
         add_binary clevis-decrypt-tpm2
-        add_full_dir /usr/lib libtss2-tcti-device.so
+        add_full_dir /usr/lib/libtss2-tcti-device.so
     else
         warning "Package tpm2-tools not installed. Unlocking with tpm2 will not work"
     fi
