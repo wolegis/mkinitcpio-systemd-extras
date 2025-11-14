@@ -113,7 +113,7 @@ behavior can be overruled in two ways:
     that are interpreted by the shell.  Example: To allow to unlock LUKS
     encrypted volumes from remote (but nothing else, especially no shell
     access) set:
-    SD_DROPBEAR_COMMAND="systemd-tty-ask-password-agent --query --watch"
+    SD_DROPBEAR_COMMAND="systemd-tty-ask-password-agent"
 
  o  Use option 'command=...' for the entry in /root/.ssh/authorized_keys that
     contains the public key used to establish the SSH session. In the likely
@@ -121,7 +121,7 @@ behavior can be overruled in two ways:
     initramfs you can set SD_DROPBEAR_AUTHORIZED_KEYS to specify a special
     version of this file to be copied into the initramfs.
     Example: To allow to unlock LUKS encrypted volumes from remote specify:
-    command="systemd-tty-ask-password-agent --query --watch" ....
+    command="systemd-tty-ask-password-agent" ....
 
 Mind that these two variables are not mutually exclusive. It's just that
 SD_DROPBEAR_COMMAND overrides all 'command=...' in authorized_keys (and all
