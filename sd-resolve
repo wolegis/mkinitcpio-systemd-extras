@@ -12,10 +12,12 @@ build() {
         error "${SD_RESOLVE_CONFIG} does not exist"
         return 1
     fi
-    add_file "$SD_RESOLVE_CONFIG" /etc/systemd/resolved.conf
+    add_file "$SD_RESOLVE_CONFIG" /etc/systemd/resolved.conf 444
     if [[ -d "${SD_RESOLVE_CONFIG}.d" ]]; then
-        add_dir /etc/systemd/resolved.conf.d
-        (cd "${SD_RESOLVE_CONFIG}.d"; cp -ra -t "$BUILDROOT/etc/systemd/resolved.conf.d" .)
+        local file
+        for file in $(find "${SD_RESOLVE_CONFIG}.d" -depth -type f | sed -e "s|^${SD_RESOLVE_CONFIG}\.d/||"); do
+            add_file "${SD_RESOLVE_CONFIG}.d/$file" "/etc/systemd/resolved.conf.d/$file" 444
+        done
     fi
 
     add_file /etc/hostname

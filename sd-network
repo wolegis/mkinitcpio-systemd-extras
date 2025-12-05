@@ -18,7 +18,7 @@ build() {
         filter+=("!" "-name" "$exclude")
     done
     for file in $(find "$SD_NETWORK_CONFIG" -depth -type f "${filter[@]}" | sed -e "s|^${SD_NETWORK_CONFIG}/||"); do
-        add_file "$SD_NETWORK_CONFIG/$file" "/etc/systemd/network/$file"
+        add_file "$SD_NETWORK_CONFIG/$file" "/etc/systemd/network/$file" 444
     done
 
     add_checked_modules /drivers/net
