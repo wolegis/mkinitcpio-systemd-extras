@@ -7,7 +7,16 @@ build() {
     add_symlink /etc/systemd/system/sysinit.target.wants/systemd-networkd.service \
                 /usr/lib/systemd/system/systemd-networkd.service
 
-    declare -F add_systemd_config_dir >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+    declare -F add_systemd_config_file >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+
+    if [[ -n "$SD_NETWORKD_CONFIG" ]]; then
+        add_systemd_config_file "$SD_NETWORKD_CONFIG" "/etc/systemd/networkd.conf" 444 || return $?
+    elif [[ -n "$(sed -e 's/#.*//;/^[[:blank:]]*$/d;/^\[/d' < /etc/systemd/networkd.conf)" ]]; then
+        # probably customized networkd configuration. might cause problems in the future
+        warning "In the near future /etc/systemd/networkd.conf will be copied to initramfs."
+        warning "In case your setup relies on this file NOT being copied consider using"
+        warning "SD_NETWORKD_CONFIG and specify an empty file."
+    fi
 
     add_systemd_config_dir "${SD_NETWORK_CONFIG:-/etc/systemd/network}" "/etc/systemd/network" \
             444 "${SD_NETWORK_EXCLUDES[@]}" || return $?
