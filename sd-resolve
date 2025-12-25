@@ -38,6 +38,6 @@ systemd-resolved.service.  Configuration is copied either
  o  from \$SD_RESOLVE_CONFIG in case this is a readable file and optionally
     \$SD_RESOLVE_CONFIG.d in case this is an existing directory.
 
-SD_RESOLVE_CONFIG is supposed to be set in /etc/mkinitcpio.conf.
+If required SD_RESOLVE_CONFIG must be set in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }

@@ -68,5 +68,8 @@ The SSH servers supported are TinySSH and Dropbear. TinySSH is default.
 Dropbear can be used by setting SD_RETARD_SSH_SERVICE=dropbear. Any service
 name other than dropbear or tinyssh is tolerated but produces a warning. Your
 mileage may vary.
+
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Retarder for
+details.
 __EOF_HELP__
 }

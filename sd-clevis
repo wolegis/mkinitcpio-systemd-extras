@@ -73,6 +73,9 @@ help() {
 This hook allows unlocking encrypted volumes (even root) with clevis. tang and
 tpm2 bound volumes are supported. Mind that this hooks only works in
 conjunction with sd-encrypt.
+
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Clevis for
+details.
 __EOF_HELP__
 }
 

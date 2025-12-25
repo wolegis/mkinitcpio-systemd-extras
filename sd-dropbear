@@ -87,7 +87,7 @@ build() {
 
 help() {
     cat <<__EOF_HELP__
-This hook enables dropbear SSH server within systemd initramfs.
+This hook enables dropbear SSH server within a systemd based initramfs.
 
 It copies all required files and binaries to initramfs and enables listening
 TCP port 22.  Host keys are either
@@ -122,8 +122,12 @@ commands provided by a SSH client).
 
 Set SD_DROPBEAR_PORT to specify a port other than 22.
 
-Set SD_DROPBEAR_AUTHORIZED_KEYS to specify a keys file other than /root/.ssh/authorized_keys.
+Set SD_DROPBEAR_AUTHORIZED_KEYS to specify a keys file other than
+/root/.ssh/authorized_keys.
 
-The variables must be set somewhere in /etc/mkinitcpio.conf.
+If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
+
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Dropbear-SSH-server
+for details.
 __EOF_HELP__
 }

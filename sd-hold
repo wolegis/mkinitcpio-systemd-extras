@@ -33,5 +33,7 @@ this root file system.
 Mind that to proceed with the boot process you have to delete /etc/hold in your
 initramfs, i.e. some kind of access to the initramfs is required. The
 mkinitcpio hooks sd-tinyssh and sd-network enable access via SSH.
+
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Hold for details.
 __EOF_HELP__
 }

@@ -72,7 +72,7 @@ build() {
 
 help() {
     cat <<__EOF_HELP__
-This hook enables tinysshd with systemd initramfs.
+This hook enables tinyssh within a systemd based initramfs.
 
 It copies all files and binaries required by tinyssh to initramfs and enables
 listening TCP port 22.  Host keys are either
@@ -96,8 +96,8 @@ variables can be used to alter this behavior:
 
  o  SD_TINYSSH_SCRIPT defines a file with shell commands that are executed
     before the interactive shell is presented. Example: To allow to unlock LUKS
-    encrypted volumes from remote but also escape to an interactive shell with CTRL-C
-    specify a file that contains
+    encrypted volumes from remote but also escape to an interactive shell with
+    CTRL-C specify a file that contains:
     systemd-tty-ask-password-agent --query --watch
 
 Only one of the two variables is taken into account. SD_TINYSSH_COMMAND takes
@@ -105,8 +105,9 @@ precedence.
 
 Set SD_TINYSSH_PORT to specify a port other than 22.
 
-Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than /root/.ssh/authorized_keys.
+Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than
+/root/.ssh/authorized_keys.
 
-The variables must be set somewhere in /etc/mkinitcpio.conf.
+If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }

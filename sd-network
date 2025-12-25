@@ -31,7 +31,7 @@ build() {
 
 help() {
     cat <<__EOF_HELP__
-This hook allows for initial network setup with systemd initramfs.
+This hook allows initial network setup within a systemd based initramfs.
 
 It copies all files, binaries and drivers required by systemd-networkd to the
 initramfs and enables systemd-networkd.service. Network configuration is copied
@@ -41,7 +41,12 @@ exclude certain configuration files from being copied into initramfs. Specify
 globs (e.g. "wg*") or filenames. Always put them in quotes to prevent undesired
 behaviour.
 
-SD_NETWORK_CONFIG and SD_NETWORK_EXCLUDES must be set in /etc/mkinitcpio.conf.
+/etc/systemd/networkd.conf is currently not copied (but this will change in the
+near future). Set variable \$SD_NETWORKD_CONFIG in case you need a
+configuration deviating from systemd-networkd's defaults.
+
+If required SD_NETWORK_CONFIG, SD_NETWORK_EXCLUDES and SD_NETWORKD_CONFIG must
+be set in /etc/mkinitcpio.conf.
 
 See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Networking for
 details, especially about how to deal with network interface names differing

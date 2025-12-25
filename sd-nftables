@@ -40,15 +40,15 @@ build() {
 
 help() {
     cat <<__EOF_HELP__
-This hook enables netfilter capability with nftables during early boot.
+This hook enables netfilter capabilities with nftables during early boot.
 
-It copies all the required files, binaries, and modules to initramfs and
-enables nftables.service. Configuration is copied either
+It copies all the required files, binaries and modules to initramfs and enables
+nftables.service. Configuration is copied either
 
  o  from the file specified by \$SD_NFTABLES_CONFIG or
 
  o  from /etc/nftables.conf (in case \$SD_NFTABLES_CONFIG has not been set).
 
-SD_NFTABLES_CONFIG is supposed to be set in /etc/mkinitcpio.conf.
+If required SD_NFTABLES_CONFIG must be set in /etc/mkinitcpio.conf.
 __EOF_HELP__
 }
