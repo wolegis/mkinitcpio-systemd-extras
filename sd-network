@@ -7,19 +7,10 @@ build() {
     add_symlink /etc/systemd/system/sysinit.target.wants/systemd-networkd.service \
                 /usr/lib/systemd/system/systemd-networkd.service
 
-    SD_NETWORK_CONFIG="${SD_NETWORK_CONFIG:-/etc/systemd/network}"
-    if [[ ! -d "$SD_NETWORK_CONFIG" ]]; then
-        error "${SD_NETWORK_CONFIG} is not a directory or does not exist"
-        return 1
-    fi
+    declare -F add_systemd_config_dir >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
-    local exclude filter=() file
-    for exclude in "${SD_NETWORK_EXCLUDES[@]}"; do
-        filter+=("!" "-name" "$exclude")
-    done
-    for file in $(find "$SD_NETWORK_CONFIG" -depth -type f "${filter[@]}" | sed -e "s|^${SD_NETWORK_CONFIG}/||"); do
-        add_file "$SD_NETWORK_CONFIG/$file" "/etc/systemd/network/$file" 444
-    done
+    add_systemd_config_dir "${SD_NETWORK_CONFIG:-/etc/systemd/network}" "/etc/systemd/network" \
+            444 "${SD_NETWORK_EXCLUDES[@]}" || return $?
 
     add_checked_modules /drivers/net
 

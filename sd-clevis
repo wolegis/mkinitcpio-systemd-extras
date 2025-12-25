@@ -20,16 +20,9 @@ build() {
         return 1
     fi
 
-    # make sure busybox (and thus sh) are present
-    # (might have been already installed by some other hook, e.g. base)
-    # (other busybox applets are added also because they allocate nearly no space in initramfs)
-    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
-        add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
-        local applet
-        for applet in $(/usr/lib/initcpio/busybox --list); do
-            add_symlink "/usr/bin/$applet" busybox
-        done
-    fi
+    declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+
+    add_busybox || return $?
 
     # common files
     add_binary bash

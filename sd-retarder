@@ -17,20 +17,13 @@ build() {
         warning "Not one of the recommended SSH services 'tinyssh' or 'dropbear' SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE"
     fi
 
-    # make sure busybox (and thus sh) are present
-    # (might have been already installed by some other hook, e.g. base)
-    # (other busybox applets are added also because they allocate nearly no space in initramfs)
-    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
-        add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
-        local applet
-        for applet in $(/usr/lib/initcpio/busybox --list); do
-            add_symlink "/usr/bin/$applet" busybox
-        done
-    fi
+    declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+
+    add_busybox || return $?
 
     local script=(
         "count=$SD_RETARD_SECONDS;"
-        'while [ $count -gt 0 ] && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
+        'while (( count > 0 )) && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
             'sleep 1;'
             'let --count;'
         'done;'
@@ -46,6 +39,7 @@ build() {
         ""
         "[Service]"
         "Type=forking"
+        # usage of [*] is intentional here
         "ExecStart=sh -c '${script[*]}'"
         "TimeoutStartSec=infinity"
     )

@@ -1,8 +1,9 @@
-aur
-PKGBUILD
-TODO
-test-*
-wiki
-*.pkg.tar.zst
-pkg
-src
+/aur
+/PKGBUILD
+/TODO
+/test-*
+/wiki
+/*.pkg.tar.zst
+/pkg
+/src
+/build

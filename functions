@@ -1,0 +1,47 @@
+# utility functions used by install hooks provided by package mkinitcpio-systemd-extras
+
+# make sure busybox (and thus sh) are present
+# might have been already installed by some other hook, e.g. base
+# other busybox applets are added also because they allocate nearly no space in initramfs
+add_busybox() {
+    if [[ ! -x "$BUILDROOT/usr/bin/busybox" ]]; then
+        add_binary /usr/lib/initcpio/busybox /usr/bin/busybox
+        local applet
+        for applet in $(/usr/lib/initcpio/busybox --list); do
+            add_symlink "/usr/bin/$applet" busybox
+        done
+    fi
+}
+
+
+# most (if not all) configuration files used by systemd and its many accompanying tools
+# offer the usage of so-called drop-ins
+add_systemd_config_file() {
+    local config_file="$1" destination="${2:-$config_file}" mode="$3"
+
+    add_file "$config_file" "$destination" "$mode" || return $?
+    if [[ -d "${config_file}.d" ]]; then
+        local drop_in
+        while read -r drop_in; do
+            add_file "$drop_in" "${destination}.d/${drop_in##*/}" "$mode" || return $?
+        done < <(find "${config_file}.d" -mindepth 1 -maxdepth 1 -type f -name '*.conf')
+    fi
+}
+
+# argument $4 and following are glob patterns to exclude certain configuration files
+add_systemd_config_dir() {
+    local config_dir="$1" destination="${2:-config_dir}" mode="$3"
+
+    shift; shift; shift
+    if [[ ! -d "$config_dir" ]]; then
+        error "${config_dir} is not a directory or does not exist"
+        return 1
+    fi
+    local exclude filter=() config_file
+    for exclude in "$@"; do
+        filter+=("!" "-name" "$exclude")
+    done
+    while read -r config_file; do
+        add_systemd_config_file "$config_dir/$config_file" "$destination/$config_file" "$mode" || return $?
+    done < <(find "$config_dir" -mindepth 1 -maxdepth 1 -type f "${filter[@]}" | sed -e "s|^${config_dir}/||")
+}

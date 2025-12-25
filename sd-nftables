@@ -28,9 +28,7 @@ build() {
         /usr/lib/systemd/systemd/nftables.service
 
     # needed to support port names in rules
-    if [[ -f /etc/services ]]; then
-        add_file /etc/services
-    fi
+    [[ -f /etc/services ]] && add_file /etc/services
 
     add_binary /usr/bin/nft
     add_all_modules /net/bridge/netfilter
