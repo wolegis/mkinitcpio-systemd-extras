@@ -23,7 +23,7 @@ build() {
 
     local script=(
         "count=$SD_RETARD_SECONDS;"
-        'while (( count > 0 )) && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
+        'while [ $count -gt 0 ] && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
             'sleep 1;'
             'let --count;'
         'done;'
