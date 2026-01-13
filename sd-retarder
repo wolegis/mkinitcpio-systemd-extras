@@ -2,7 +2,7 @@
 
 build() {
     SD_RETARD_SECONDS="${SD_RETARD_SECONDS:-20}"
-    if (( SD_RETARD_SECONDS < 1 || SD_RETARD_SECONDS > 600 )); then
+    if (( SD_RETARD_SECONDS < 1 || SD_RETARD_SECONDS > 600 )) && [[ "$SD_RETARD_SECONDS" != "infinity" ]]; then
         error "Illegal value SD_RETARD_SECONDS=$SD_RETARD_SECONDS"
         return 1
     fi
@@ -21,48 +21,73 @@ build() {
 
     add_busybox || return $?
 
-    local script=(
-        "count=$SD_RETARD_SECONDS;"
-        'while [ $count -gt 0 ] && ! systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
-            'sleep 1;'
-            'let --count;'
-        'done;'
-        'while systemctl show '$SD_RETARD_SSH_SERVICE'@*.service | grep -q "^ActiveState=active$"; do'
-            'sleep 1;'
-        'done'
-    )
-    local service=(
+    local unit=(
         "[Unit]"
-        "Description=Retarder service ('Started' means retardation finished)"
+        "Description=Retarder (Started means retardation finished)"
         "DefaultDependencies=no"
 	"Before=sysinit.target"
         ""
         "[Service]"
         "Type=forking"
-        # usage of [*] is intentional here
-        "ExecStart=sh -c '${script[*]}'"
+        "ExecStart=sh -c 'mkfifo /tmp/hold; cat </tmp/hold >/dev/null; rm /tmp/hold'"
         "TimeoutStartSec=infinity"
     )
-    printf "%s\n" "${service[@]}" > ${BUILDROOT}/etc/systemd/system/retarder.service
-
-    # enable retarder service
+    printf "%s\n" "${unit[@]}" > ${BUILDROOT}/usr/lib/systemd/system/retarder.service
     add_symlink /etc/systemd/system/sysinit.target.requires/retarder.service /usr/lib/systemd/system/retarder.service
+
+    local check_ssh_sessions=(
+        "systemctl show \"${SD_RETARD_SSH_SERVICE}@*.service\" |"
+        "grep -q \"^ActiveState=active\$\" ||"
+        "echo >/tmp/hold"
+    )
+    local drop_in=(
+        "[Service]"
+        "ExecStopPost=sh -c '${check_ssh_sessions[*]}'"
+    )
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in ${SD_RETARD_SSH_SERVICE}@.service check-ssh-sessions
+
+    if [[ "$SD_RETARD_SECONDS" != "infinity" ]]; then
+        unit=(
+            "[Unit]"
+            "Description=Check for SSH sessions ${SD_RETARD_SECONDS}s after boot"
+            "DefaultDependencies=no"
+            "Before=sysinit.target"
+            ""
+            "[Timer]"
+            "OnBootSec=$SD_RETARD_SECONDS"
+        )
+        printf "%s\n" "${unit[@]}" > ${BUILDROOT}/usr/lib/systemd/system/check-ssh-sessions.timer
+        add_symlink /etc/systemd/system/sysinit.target.wants/check-ssh-sessions.timer /usr/lib/systemd/system/check-ssh-sessions.timer
+
+        unit=(
+            "[Unit]"
+            "Description=Check for SSH sessions ${SD_RETARD_SECONDS}s after boot"
+            "DefaultDependencies=no"
+            ""
+            "[Service]"
+            "ExecStart=sh -c '${check_ssh_sessions[*]}'"
+        )
+        printf "%s\n" "${unit[@]}" > ${BUILDROOT}/usr/lib/systemd/system/check-ssh-sessions.service
+    fi
 }
 
 help() {
     cat <<__EOF_HELP__
-This hook enables a service retarding boot
+This hook delays (retards) boot
 
- o  for at least a certain period of time (default 20 seconds) and
+ o  until all SSH sessions have been terminated or
 
- o  until all SSH sessions have been terminated.
+ o  until a certain period of time (default 20 seconds) has elapsed (provided
+    no SSH sessions are active at the end of this period).
 
 This way it is possible to automatically boot to the regular Linux system
 without user intervention, while still being able to log into the preliminary
 Linux of initramfs and perform arbitrary actions (e.g. backup, decryption).
 
 By default the duration of the initramfs phase is extended to approx. 20
-seconds.  This value can be set by SD_RETARD_SECONDS.
+seconds.  This value can be set by SD_RETARD_SECONDS. When specifying
+"infinity" the boot process proceeds only when the last SSH session has been
+terminated.
 
 The SSH servers supported are TinySSH and Dropbear. TinySSH is default.
 Dropbear can be used by setting SD_RETARD_SSH_SERVICE=dropbear. Any service
