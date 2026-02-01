@@ -14,12 +14,12 @@ build() {
     add_systemd_unit tinyssh@.service
 
     # enable tinysshd listening on TCP port $SD_TINYSSH_PORT (if set to legal port number)
-    SD_TINYSSH_PORT=${SD_TINYSSH_PORT:-22}
+    SD_TINYSSH_PORT="${SD_TINYSSH_PORT:-22}"
     if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
         error "Illegal value SD_TINYSSH_PORT=$SD_TINYSSH_PORT"
         return 1
     fi
-    add_symlink /etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket /usr/lib/systemd/system/tinyssh@.socket
+    add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket" /usr/lib/systemd/system/tinyssh@.socket
 
     local drop_in=(
         '[Unit]'
@@ -27,7 +27,7 @@ build() {
         'After=systemd-networkd.service'
         'DefaultDependencies=no'
     )
-    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@$SD_TINYSSH_PORT.socket override
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in "tinyssh@$SD_TINYSSH_PORT.socket" override
 
     drop_in=(
         "[Unit]"
@@ -39,15 +39,22 @@ build() {
     )
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
 
-    if [[ -r /etc/tinyssh/sshkeydir/ed25519.pk && -r /etc/tinyssh/sshkeydir/.ed25519.sk ]]; then
-        add_file /etc/tinyssh/sshkeydir/ed25519.pk
-        add_file /etc/tinyssh/sshkeydir/.ed25519.sk
-    elif [[ -r /etc/ssh/ssh_host_ed25519_key ]]; then
+    local warn keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
+    if [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk" ]]; then
+        add_file "$keydir/ed25519.pk" /etc/tinyssh/sshkeydir/ed25519.pk
+        add_file "$keydir/.ed25519.sk" /etc/tinyssh/sshkeydir/.ed25519.sk
+        [[ -z "$SD_TINYSSH_KEYDIR" ]] && warn=true
+    elif [[ -z "$SD_TINYSSH_KEYDIR" && -r /etc/ssh/ssh_host_ed25519_key ]]; then
         add_dir /etc/tinyssh
         tinyssh-convert "$BUILDROOT/etc/tinyssh/sshkeydir" </etc/ssh/ssh_host_ed25519_key
+        warn=true
     else
-        error "Missing tinyssh host key"
+        error "Missing SSH host key"
         return 1
+    fi
+    if [[ "$warn" ]]; then
+        warning "Reusing the host keys from the regular operating environment poses a security risk."
+        warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server for details."
     fi
 
     SD_TINYSSH_AUTHORIZED_KEYS=${SD_TINYSSH_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}
@@ -75,14 +82,17 @@ help() {
 This hook enables tinyssh within a systemd based initramfs.
 
 It copies all files and binaries required by tinyssh to initramfs and enables
-listening TCP port 22.  Host keys are either
+listening TCP port 22 (or some other).  Host keys are either
+
+ o  copied from $SD_TINYSSH_KEYDIR if they exist or
 
  o  copied from /etc/tinyssh/sshkeydir if they exist or
 
  o  converted on the fly from the corresponding openssh ED25519 host key
     /etc/ssh/ssh_host_ed25519_key. This requires python to be installed.
 
-If none of the two sources exists the hook aborts.
+Option 2 and 3 are not taken into account when SD_TINYSSH_KEYDIR has been set.
+If none of these options yield a server key the hook aborts.
 
 By default tinyssh presents the busybox shell after successful login. Two
 variables can be used to alter this behavior:
@@ -108,6 +118,12 @@ Set SD_TINYSSH_PORT to specify a port other than 22.
 Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than
 /root/.ssh/authorized_keys.
 
+Use SD_TINYSSH_KEYDIR to specify the location of a pair of tinyssh server keys
+to be used in initramfs. Not using this variable causes a security warning.
+
 If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
+
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server
+for details.
 __EOF_HELP__
 }
