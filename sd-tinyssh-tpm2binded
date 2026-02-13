@@ -6,10 +6,6 @@ build() {
         return 1
     fi
 
-    declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
-
-    add_busybox || return $?
-
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
 
