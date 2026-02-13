@@ -170,8 +170,13 @@ listening TCP port 22 (or some other).  Host keys are selected in this order:
 
     --tpm2-pcrs=0+7 binds decryption to PCR 0 (firmware) and PCR 7 (Secure
     Boot state).  After a firmware update or Secure Boot policy change the key
-    must be re-sealed.  Omit --tpm2-pcrs entirely to bind only to the TPM
-    itself (no PCR policy).
+    must be re-sealed.
+
+    WARNING: If --tpm2-pcrs is omitted the credential is bound to the TPM
+    chip alone.  This means anyone who can boot ANY operating system on the
+    machine (e.g. from a USB stick) will be able to unseal and read the
+    secret key.  It is therefore strongly recommended to seal against at
+    least PCR 0 and PCR 7 (--tpm2-pcrs=0+7).
 
  2. Plaintext tinyssh key pair copied from \$SD_TINYSSH_KEYDIR (or
     /etc/tinyssh/sshkeydir) if ed25519.pk and .ed25519.sk exist.
