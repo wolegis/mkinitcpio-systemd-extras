@@ -6,6 +6,11 @@ build() {
         return 1
     fi
 
+    if ! pacman -Qi tpm2-tss >/dev/null 2>&1; then
+        error "Package tpm2-tss not installed (required for TPM2-sealed SSH host key)"
+        return 1
+    fi
+
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
 
@@ -17,87 +22,63 @@ build() {
     fi
     add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket" /usr/lib/systemd/system/tinyssh@.socket
 
-    # --- Host key handling ---
-    local warn keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
-    local use_tpm2=false
+    # --- Host key handling (TPM2-sealed only) ---
+    local keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
 
-    # TPM2-sealed key takes priority: look for the encrypted credential file
-    if [[ -r "$keydir/.ed25519.sk.cred" && -r "$keydir/ed25519.pk" ]]; then
-        use_tpm2=true
-
-        if ! pacman -Qi tpm2-tss >/dev/null 2>&1; then
-            error "Package tpm2-tss not installed (required for TPM2-sealed SSH host key)"
-            return 1
-        fi
-
-        # systemd-creds and its direct library deps
-        add_binary systemd-creds
-
-        # libtss2-tcti-device.so is dlopen'd by tpm2-tss at runtime and thus
-        # not pulled in automatically by add_binary
-        local lib
-        for lib in /usr/lib/libtss2-tcti-device.so*; do
-            [[ -e "$lib" ]] && add_file "$lib"
-        done
-
-        # Copy public key (plaintext) and sealed secret key into initramfs
-        add_file "$keydir/ed25519.pk" /etc/tinyssh/sshkeydir/ed25519.pk
-        add_file "$keydir/.ed25519.sk.cred" /etc/tinyssh/sshkeydir/.ed25519.sk.cred
-
-        # Generate a oneshot service that decrypts the sealed host key at boot.
-        # The decrypted key is written to the initramfs tmpfs and only lives in
-        # memory — it never touches persistent storage.
-        printf "%s\n" \
-            "[Unit]" \
-            "Description=Decrypt TinySSH host key from TPM2" \
-            "DefaultDependencies=no" \
-            "" \
-            "[Service]" \
-            "Type=oneshot" \
-            "RemainAfterExit=yes" \
-            "UMask=0077" \
-            "ExecStart=/usr/bin/systemd-creds decrypt --tpm2-device=auto --name=tinyssh-hostkey /etc/tinyssh/sshkeydir/.ed25519.sk.cred /etc/tinyssh/sshkeydir/.ed25519.sk" \
-            > "$BUILDROOT/usr/lib/systemd/system/tinyssh-hostkey-decrypt.service"
-        chmod 644 "$BUILDROOT/usr/lib/systemd/system/tinyssh-hostkey-decrypt.service"
-
-        # Enable the decrypt service in sysinit
-        add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh-hostkey-decrypt.service" \
-                    /usr/lib/systemd/system/tinyssh-hostkey-decrypt.service
-
-    elif [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk" ]]; then
-        add_file "$keydir/ed25519.pk" /etc/tinyssh/sshkeydir/ed25519.pk
-        add_file "$keydir/.ed25519.sk" /etc/tinyssh/sshkeydir/.ed25519.sk
-        [[ -z "$SD_TINYSSH_KEYDIR" ]] && warn=true
-    elif [[ -z "$SD_TINYSSH_KEYDIR" && -r /etc/ssh/ssh_host_ed25519_key ]]; then
-        add_dir /etc/tinyssh
-        tinyssh-convert "$BUILDROOT/etc/tinyssh/sshkeydir" </etc/ssh/ssh_host_ed25519_key
-        warn=true
-    else
-        error "Missing SSH host key"
+    if [[ ! -r "$keydir/ed25519.pk" ]]; then
+        error "Public key '$keydir/ed25519.pk' not found (or not readable)."
+        error "Generate keys first:  tinysshd-makekey $keydir"
         return 1
     fi
-    if [[ "$warn" ]]; then
-        warning "Reusing the host keys from the regular operating environment poses a security risk."
-        warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server for details."
+    if [[ ! -r "$keydir/.ed25519.sk.cred" ]]; then
+        error "TPM2-sealed secret key '$keydir/.ed25519.sk.cred' not found (or not readable)."
+        error "Seal the secret key with:"
+        error "  systemd-creds encrypt --with-key=tpm2 --tpm2-pcrs=0+7 --name=tinyssh-hostkey \\"
+        error "      $keydir/.ed25519.sk $keydir/.ed25519.sk.cred"
+        return 1
     fi
 
+    # systemd-creds and its direct library deps
+    add_binary systemd-creds
+
+    # libtss2-tcti-device.so is dlopen'd by tpm2-tss at runtime and thus
+    # not pulled in automatically by add_binary
+    local lib
+    for lib in /usr/lib/libtss2-tcti-device.so*; do
+        [[ -e "$lib" ]] && add_file "$lib"
+    done
+
+    # Copy public key (plaintext) and sealed secret key into initramfs
+    add_file "$keydir/ed25519.pk" /etc/tinyssh/sshkeydir/ed25519.pk
+    add_file "$keydir/.ed25519.sk.cred" /etc/tinyssh/sshkeydir/.ed25519.sk.cred
+
+    # Generate a oneshot service that decrypts the sealed host key at boot.
+    # The decrypted key is written to the initramfs tmpfs and only lives in
+    # memory — it never touches persistent storage.
+    printf "%s\n" \
+        "[Unit]" \
+        "Description=Decrypt TinySSH host key from TPM2" \
+        "DefaultDependencies=no" \
+        "" \
+        "[Service]" \
+        "Type=oneshot" \
+        "RemainAfterExit=yes" \
+        "UMask=0077" \
+        "ExecStart=/usr/bin/systemd-creds decrypt --tpm2-device=auto --name=tinyssh-hostkey /etc/tinyssh/sshkeydir/.ed25519.sk.cred /etc/tinyssh/sshkeydir/.ed25519.sk" \
+        > "$BUILDROOT/usr/lib/systemd/system/tinyssh-hostkey-decrypt.service"
+    chmod 644 "$BUILDROOT/usr/lib/systemd/system/tinyssh-hostkey-decrypt.service"
+
+    # Enable the decrypt service in sysinit
+    add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh-hostkey-decrypt.service" \
+                /usr/lib/systemd/system/tinyssh-hostkey-decrypt.service
+
     # --- Socket drop-in ---
-    local drop_in
-    if $use_tpm2; then
-        drop_in=(
-            '[Unit]'
-            'Requires=systemd-networkd.service tinyssh-hostkey-decrypt.service'
-            'After=systemd-networkd.service tinyssh-hostkey-decrypt.service'
-            'DefaultDependencies=no'
-        )
-    else
-        drop_in=(
-            '[Unit]'
-            'Requires=systemd-networkd.service'
-            'After=systemd-networkd.service'
-            'DefaultDependencies=no'
-        )
-    fi
+    local drop_in=(
+        '[Unit]'
+        'Requires=systemd-networkd.service tinyssh-hostkey-decrypt.service'
+        'After=systemd-networkd.service tinyssh-hostkey-decrypt.service'
+        'DefaultDependencies=no'
+    )
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in "tinyssh@$SD_TINYSSH_PORT.socket" override
 
     # --- Service drop-in ---
@@ -134,20 +115,21 @@ build() {
 
 help() {
     cat <<__EOF_HELP__
-This hook enables tinyssh within a systemd based initramfs.
+This hook enables tinyssh within a systemd based initramfs, with the server's
+secret key sealed to the machine's TPM2 chip via systemd-creds.
 
-It copies all files and binaries required by tinyssh to initramfs and enables
-listening TCP port 22 (or some other).  Host keys are selected in this order:
+The sealed credential (.ed25519.sk.cred) is embedded in the initramfs image.
+At boot a oneshot service decrypts it into the initramfs tmpfs, so the
+plaintext secret key only ever exists in memory — it never touches persistent
+storage.
 
- 1. TPM2-sealed key: If \$SD_TINYSSH_KEYDIR (or /etc/tinyssh/sshkeydir) contains
-    both ed25519.pk and .ed25519.sk.cred, the encrypted credential is embedded
-    in the initramfs and decrypted at boot via systemd-creds using the TPM2
-    chip.  The plaintext secret key only ever exists in memory (initramfs tmpfs)
-    and never on persistent storage.
+PREPARATION
 
-    To prepare a TPM2-sealed key:
+ 1. Generate tinyssh host keys (if not already present):
 
       tinysshd-makekey /etc/tinyssh/sshkeydir
+
+ 2. Seal the secret key to the TPM2 chip:
 
       systemd-creds encrypt \\
           --with-key=tpm2 \\
@@ -156,17 +138,19 @@ listening TCP port 22 (or some other).  Host keys are selected in this order:
           /etc/tinyssh/sshkeydir/.ed25519.sk \\
           /etc/tinyssh/sshkeydir/.ed25519.sk.cred
 
-    After sealing you may (and should) remove the plaintext secret key:
+ 3. Remove the plaintext secret key (keep an offline backup!):
 
       rm /etc/tinyssh/sshkeydir/.ed25519.sk
 
-    Then rebuild the initramfs:
+ 4. Rebuild the initramfs:
 
       mkinitcpio -P
 
+PCR POLICY
+
     --tpm2-pcrs=0+7 binds decryption to PCR 0 (firmware) and PCR 7 (Secure
-    Boot state).  After a firmware update or Secure Boot policy change the key
-    must be re-sealed.
+    Boot state).  After a firmware update or Secure Boot policy change the
+    key must be re-sealed (repeat steps 2-4 above).
 
     WARNING: If --tpm2-pcrs is omitted the credential is bound to the TPM
     chip alone.  This means anyone who can boot ANY operating system on the
@@ -174,44 +158,25 @@ listening TCP port 22 (or some other).  Host keys are selected in this order:
     secret key.  It is therefore strongly recommended to seal against at
     least PCR 0 and PCR 7 (--tpm2-pcrs=0+7).
 
- 2. Plaintext tinyssh key pair copied from \$SD_TINYSSH_KEYDIR (or
-    /etc/tinyssh/sshkeydir) if ed25519.pk and .ed25519.sk exist.
+VARIABLES (set in /etc/mkinitcpio.conf)
 
- 3. Converted on the fly from the corresponding openssh ED25519 host key
-    /etc/ssh/ssh_host_ed25519_key.  This requires python to be installed.
+    SD_TINYSSH_KEYDIR
+        Directory containing ed25519.pk and .ed25519.sk.cred.
+        Default: /etc/tinyssh/sshkeydir
 
-Options 2 and 3 are not taken into account when SD_TINYSSH_KEYDIR has been set.
-If none of these options yield a server key the hook aborts.
+    SD_TINYSSH_PORT
+        TCP port tinyssh listens on.  Default: 22
 
-By default tinyssh presents the busybox shell after successful login. Two
-variables can be used to alter this behavior:
+    SD_TINYSSH_AUTHORIZED_KEYS
+        Authorized-keys file for root.  Default: /root/.ssh/authorized_keys
 
- o  SD_TINYSSH_COMMAND defines a shell command. The string is appended to
-    'sh -c', i.e. it may contain blanks, quotes and all kinds of special
-    characters that are interpreted by the shell.  Example: To allow to unlock
-    LUKS encrypted volumes from remote (but nothing else, especially no shell
-    access) set:
-    SD_TINYSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
+    SD_TINYSSH_COMMAND
+        Shell command executed instead of an interactive shell.  Example:
+        SD_TINYSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
 
- o  SD_TINYSSH_SCRIPT defines a file with shell commands that are executed
-    before the interactive shell is presented. Example: To allow to unlock LUKS
-    encrypted volumes from remote but also escape to an interactive shell with
-    CTRL-C specify a file that contains:
-    systemd-tty-ask-password-agent --query --watch
-
-Only one of the two variables is taken into account. SD_TINYSSH_COMMAND takes
-precedence.
-
-Set SD_TINYSSH_PORT to specify a port other than 22.
-
-Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than
-/root/.ssh/authorized_keys.
-
-Use SD_TINYSSH_KEYDIR to specify the location of a pair of tinyssh server keys
-to be used in initramfs. Not using this variable causes a security warning
-(does not apply when using a TPM2-sealed key).
-
-If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
+    SD_TINYSSH_SCRIPT
+        File with shell commands executed before the interactive shell.
+        Ignored when SD_TINYSSH_COMMAND is set.
 
 See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server
 for details.
