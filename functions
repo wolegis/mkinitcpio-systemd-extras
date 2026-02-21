@@ -30,7 +30,7 @@ add_systemd_config_file() {
 
 # argument $4 and following are glob patterns to exclude certain configuration files
 add_systemd_config_dir() {
-    local config_dir="$1" destination="${2:-config_dir}" mode="$3"
+    local config_dir="$1" destination="${2:-$config_dir}" mode="$3"
 
     shift; shift; shift
     if [[ ! -d "$config_dir" ]]; then
