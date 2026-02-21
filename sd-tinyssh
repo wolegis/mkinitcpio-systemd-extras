@@ -10,6 +10,23 @@ build() {
 
     add_busybox || return $?
 
+    local encrypted keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
+    if [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk.enc" ]]; then
+        add_file "$keydir/ed25519.pk" /etc/credstore/ed25519.pk
+        add_file "$keydir/.ed25519.sk.enc" /etc/credstore.encrypted/.ed25519.sk
+        encrypted=Encrypted
+    elif [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk" ]]; then
+        add_file "$keydir/ed25519.pk" /etc/credstore/ed25519.pk
+        add_file "$keydir/.ed25519.sk" /etc/credstore/.ed25519.sk
+    elif [[ -z "$SD_TINYSSH_KEYDIR" && -r /etc/ssh/ssh_host_ed25519_key ]]; then
+        tinyssh-convert "$BUILDROOT/etc/credstore" </etc/ssh/ssh_host_ed25519_key
+        warning "Reusing the host keys from the regular operating environment poses a security risk."
+        warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server for details."
+    else
+        error "Missing SSH host key"
+        return 1
+    fi
+
     add_systemd_unit tinyssh@.socket
     add_systemd_unit tinyssh@.service
 
@@ -35,27 +52,11 @@ build() {
         ""
         "[Service]"
         "ExecStart="
-        "ExecStart=-/usr/bin/tinysshd ${SD_TINYSSH_COMMAND:+-e '${SD_TINYSSH_COMMAND}' }/etc/tinyssh/sshkeydir"
+        "ExecStart=-/usr/bin/tinysshd ${SD_TINYSSH_COMMAND:+-e '${SD_TINYSSH_COMMAND}' }\${CREDENTIALS_DIRECTORY}"
+        "LoadCredential=ed25519.pk"
+        "LoadCredential${encrypted}=.ed25519.sk"
     )
     printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
-
-    local warn keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
-    if [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk" ]]; then
-        add_file "$keydir/ed25519.pk" /etc/tinyssh/sshkeydir/ed25519.pk
-        add_file "$keydir/.ed25519.sk" /etc/tinyssh/sshkeydir/.ed25519.sk
-        [[ -z "$SD_TINYSSH_KEYDIR" ]] && warn=true
-    elif [[ -z "$SD_TINYSSH_KEYDIR" && -r /etc/ssh/ssh_host_ed25519_key ]]; then
-        add_dir /etc/tinyssh
-        tinyssh-convert "$BUILDROOT/etc/tinyssh/sshkeydir" </etc/ssh/ssh_host_ed25519_key
-        warn=true
-    else
-        error "Missing SSH host key"
-        return 1
-    fi
-    if [[ "$warn" ]]; then
-        warning "Reusing the host keys from the regular operating environment poses a security risk."
-        warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server for details."
-    fi
 
     SD_TINYSSH_AUTHORIZED_KEYS=${SD_TINYSSH_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}
     if [[ ! -r "$SD_TINYSSH_AUTHORIZED_KEYS" ]]; then
@@ -79,51 +80,43 @@ build() {
 
 help() {
     cat <<__EOF_HELP__
-This hook enables tinyssh within a systemd based initramfs.
+This hook enables tinyssh during the initramfs phase. It is only applicable for
+a systemd based intramfs phase, i.e. hook 'systemd' must be given in the HOOKS
+array in mkinitcpio.conf.
 
-It copies all files and binaries required by tinyssh to initramfs and enables
-listening TCP port 22 (or some other).  Host keys are either
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server
+for details.
 
- o  copied from $SD_TINYSSH_KEYDIR if they exist or
+The hook copies all files and binaries required by tinyssh to the initramfs
+image and enables listening TCP port 22 (or some other).
 
- o  copied from /etc/tinyssh/sshkeydir if they exist or
-
- o  converted on the fly from the corresponding openssh ED25519 host key
-    /etc/ssh/ssh_host_ed25519_key. This requires python to be installed.
-
-Option 2 and 3 are not taken into account when SD_TINYSSH_KEYDIR has been set.
-If none of these options yield a server key the hook aborts.
+Host keys are copied from \$SD_TINYSSH_KEYDIR (default /etc/tinyssh/sshkeydir).
+A secret host key '.ed25519.sk.enc' encrypted with systemd-creds is preferred.
+As a last resort the OpenSSH host key /etc/ssh/ssh_host_ed25519_key is
+converted on the fly.  This last option requires python to be installed.
 
 By default tinyssh presents the busybox shell after successful login. Two
 variables can be used to alter this behavior:
 
- o  SD_TINYSSH_COMMAND defines a shell command. The string is appended to
-    'sh -c', i.e. it may contain blanks, quotes and all kinds of special
-    characters that are interpreted by the shell.  Example: To allow to unlock
-    LUKS encrypted volumes from remote (but nothing else, especially no shell
-    access) set:
-    SD_TINYSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
+SD_TINYSSH_COMMAND defines a shell command. The string is appended to 'sh -c',
+i.e. it may contain blanks, quotes and all kinds of special characters that are
+interpreted by the shell.  Example: To allow to unlock LUKS encrypted volumes
+from remote (but nothing else, especially no shell access) set:
+SD_TINYSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
 
- o  SD_TINYSSH_SCRIPT defines a file with shell commands that are executed
-    before the interactive shell is presented. Example: To allow to unlock LUKS
-    encrypted volumes from remote but also escape to an interactive shell with
-    CTRL-C specify a file that contains:
-    systemd-tty-ask-password-agent --query --watch
+SD_TINYSSH_SCRIPT defines a file with shell commands that are executed before
+the interactive shell is presented. Example: To allow to unlock LUKS encrypted
+volumes from remote but also escape to an interactive shell with CTRL-C specify
+a file that contains:
+systemd-tty-ask-password-agent --query --watch
 
-Only one of the two variables is taken into account. SD_TINYSSH_COMMAND takes
-precedence.
+SD_TINYSSH_COMMAND takes precedence.
 
 Set SD_TINYSSH_PORT to specify a port other than 22.
 
 Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than
 /root/.ssh/authorized_keys.
 
-Use SD_TINYSSH_KEYDIR to specify the location of a pair of tinyssh server keys
-to be used in initramfs. Not using this variable causes a security warning.
-
 If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
-
-See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server
-for details.
 __EOF_HELP__
 }
