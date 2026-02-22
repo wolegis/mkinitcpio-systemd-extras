@@ -28,7 +28,7 @@ build() {
             fi
         done
     fi
-    if [[ "${#encrypted_host_keys[@]}" == "0" ]] && [[ "${#host_keys[@]}" == "0" ]]; then
+    if [[ -z "$SD_DROPBEAR_KEYDIR && "${#encrypted_host_keys[@]}" == "0" && "${#host_keys[@]}" == "0" ]]; then
         for key_type in ed25519 rsa ecdsa dsa; do
             if [[ -r "/etc/ssh/ssh_host_${key_type}_key" ]]; then
                 mkdir -p "$BUILDROOT/etc/credstore"
