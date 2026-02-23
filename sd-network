@@ -9,15 +9,8 @@ build() {
 
     declare -F add_systemd_config_file >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
-    if [[ -n "$SD_NETWORKD_CONFIG" ]]; then
-        add_systemd_config_file "$SD_NETWORKD_CONFIG" "/etc/systemd/networkd.conf" 444 || return $?
-    elif [[ -n "$(sed -e 's/#.*//;/^[[:blank:]]*$/d;/^\[/d' < /etc/systemd/networkd.conf)" ]]; then
-        # probably customized networkd configuration. might cause problems in the future
-        warning "In the near future /etc/systemd/networkd.conf will be copied to initramfs."
-        warning "In case your setup relies on this file NOT being copied consider using"
-        warning "SD_NETWORKD_CONFIG and specify an empty file."
-    fi
-
+    add_systemd_config_file "${SD_NETWORKD_CONFIG:-/etc/systemd/networkd.conf}" \
+            "/etc/systemd/networkd.conf" 444 || return $?
     add_systemd_config_dir "${SD_NETWORK_CONFIG:-/etc/systemd/network}" "/etc/systemd/network" \
             444 "${SD_NETWORK_EXCLUDES[@]}" || return $?
 
@@ -33,17 +26,21 @@ help() {
     cat <<__EOF_HELP__
 This hook allows initial network setup within a systemd based initramfs.
 
-It copies all files, binaries and drivers required by systemd-networkd to the
-initramfs and enables systemd-networkd.service. Network configuration is copied
-from /etc/systemd/network or from \$SD_NETWORK_CONFIG if this variable
-specifies an existing directory. With the array SD_NETWORK_EXCLUDES you can
-exclude certain configuration files from being copied into initramfs. Specify
-globs (e.g. "wg*") or filenames. Always put them in quotes to prevent undesired
+It copies all files, binaries, drivers and configuration files required by
+systemd-networkd to the initramfs image and enables systemd-networkd.service.
+
+SD_NETWORK_CONFIG specifies the directory containing the network configuration
+files to be copied to the initramfs image, default being /etc/systemd/network.
+Drop-in files are also copied.
+
+With SD_NETWORK_EXCLUDES (a bash array) you can exclude certain network
+configuration files from being copied into the initramfs image. Specify globs
+(e.g.  "wg*") or filenames. Globs have to be put in quotes to prevent undesired
 behaviour.
 
-/etc/systemd/networkd.conf is currently not copied (but this will change in the
-near future). Set variable \$SD_NETWORKD_CONFIG in case you need a
-configuration deviating from systemd-networkd's defaults.
+SD_NETWORKD_CONFIG (mind the extra D) specifies the configuration file of
+systemd-networkd itself to be copied to the initramfs image, default being
+/etc/systemd/networkd.conf Drop-in files are also copied.
 
 If required SD_NETWORK_CONFIG, SD_NETWORK_EXCLUDES and SD_NETWORKD_CONFIG must
 be set in /etc/mkinitcpio.conf.
