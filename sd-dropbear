@@ -68,7 +68,6 @@ build() {
         "[Socket]"
         "ListenStream=%i"
         "Accept=true"
-        "CollectMode=inactive-or-failed"
         "KeepAlive=true"
         "IPTOS=low-delay"
         ""
@@ -82,15 +81,20 @@ build() {
         "Description=Dropbear SSH server (socket activated)"
         "Documentation=https://man.archlinux.org/man/dropbear.8"
         "DefaultDependencies=no"
+        "CollectMode=inactive-or-failed"
         ""
         "[Service]"
         "Type=exec"
         "StandardInput=socket"
         "StandardOutput=socket"
-        "ExecStart=/usr/bin/dropbear ${SD_DROPBEAR_COMMAND:+-c '${SD_DROPBEAR_COMMAND}' }-i -s${dropbear_opts}"
+        "ExecStart=/usr/bin/dropbear ${SD_DROPBEAR_COMMAND:+-c '${SD_DROPBEAR_COMMAND}' }-i -s -m${dropbear_opts}"
     )
     service_unit+=( "${load_credential_stmts[@]}" )
     printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.service"
+
+    # silence error message about missing /var/log/lastlog
+    mkdir -p "$BUILDROOT/var/log"
+    touch "$BUILDROOT/var/log/lastlog"
 
     # enable dropbear listening on TCP port $SD_DROPBEAR_PORT (if set to legal port number)
     SD_DROPBEAR_PORT="${SD_DROPBEAR_PORT:-22}"

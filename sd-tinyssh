@@ -49,6 +49,7 @@ build() {
     drop_in=(
         "[Unit]"
         "DefaultDependencies=no"
+        "CollectMode=inactive-or-failed"
         ""
         "[Service]"
         "ExecStart="
