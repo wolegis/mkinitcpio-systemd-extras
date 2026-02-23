@@ -10,43 +10,49 @@ build() {
 
     add_busybox || return $?
 
-    local key_type host_key keydir="${SD_DROPBEAR_KEYDIR:-/etc/dropbear}"
-    local -a host_keys encrypted_host_keys convert_cmd
+    local keydir="${SD_DROPBEAR_KEYDIR:-/etc/dropbear}"
+    local key_type host_key dropbear_opts convert_cmd
+    local -a load_credential_stmts
     for key_type in ed25519 rsa ecdsa dss; do
         host_key="dropbear_${key_type}_host_key"
         if [[ -r "${keydir}/${host_key}.enc" ]]; then
+            load_credential_stmts+=( "LoadCredentialEncrypted=${host_key}" )
+            dropbear_opts+=" -r \${CREDENTIALS_DIRECTORY}/${host_key}"
             add_file "${keydir}/${host_key}.enc" "/etc/credstore.encrypted/${host_key}"
-            encrypted_host_keys+=( "$host_key" )
         fi
     done
-    if [[ "${#encrypted_host_keys[@]}" == "0" ]]; then
+    if [[ "${#load_credential_stmts[@]}" == "0" ]]; then
         for key_type in ed25519 rsa ecdsa dss; do
             host_key="dropbear_${key_type}_host_key"
             if [[ -r "${keydir}/${host_key}" ]]; then
+                load_credential_stmts+=( "LoadCredential=${host_key}" )
+                dropbear_opts+=" -r \${CREDENTIALS_DIRECTORY}/${host_key}"
                 add_file "${keydir}/${host_key}" "/etc/credstore/${host_key}"
-                host_keys+=( "$host_key" )
             fi
         done
     fi
-    if [[ -z "$SD_DROPBEAR_KEYDIR && "${#encrypted_host_keys[@]}" == "0" && "${#host_keys[@]}" == "0" ]]; then
-        for key_type in ed25519 rsa ecdsa dsa; do
+    if [[ -z "$SD_DROPBEAR_KEYDIR" && "${#load_credential_stmts[@]}" == "0" ]]; then
+        for key_type in ed25519 rsa ecdsa; do
             if [[ -r "/etc/ssh/ssh_host_${key_type}_key" ]]; then
+                host_key="dropbear_${key_type}_host_key"
                 mkdir -p "$BUILDROOT/etc/credstore"
                 convert_cmd=( dropbearconvert openssh dropbear )
                 convert_cmd+=( "/etc/ssh/ssh_host_${key_type}_key" )
-                convert_cmd+=( "$BUILDROOT/etc/credstore/dropbear_${key_type}_host_key" )
+                convert_cmd+=( "$BUILDROOT/etc/credstore/${host_key}" )
                 if "${convert_cmd[@]}" 2>/dev/null; then
-                    host_keys+=( "dropbear_${key_type}_host_key" )
+                    load_credential_stmts+=( "LoadCredential=${host_key}" )
+                    dropbear_opts+=" -r \${CREDENTIALS_DIRECTORY}/${host_key}"
                 fi
             fi
         done
-        if [[ "${#host_keys[@]}" == "0" ]]; then
-            error "Missing SSH host keys"
-            return 1
-        else
+        if [[ "${#load_credential_stmts[@]}" != "0" ]]; then
             warning "Reusing the host keys from the regular operating environment poses a security risk."
             warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/Dropbear-SSH-server for details."
         fi
+    fi
+    if [[ "${#load_credential_stmts[@]}" == "0" ]]; then
+        error "Missing SSH host keys"
+        return 1
     fi
 
     add_binary dropbear
@@ -81,17 +87,9 @@ build() {
         "Type=exec"
         "StandardInput=socket"
         "StandardOutput=socket"
+        "ExecStart=/usr/bin/dropbear ${SD_DROPBEAR_COMMAND:+-c '${SD_DROPBEAR_COMMAND}' }-i -s${dropbear_opts}"
     )
-    local cmd="/usr/bin/dropbear ${SD_DROPBEAR_COMMAND:+-c '${SD_DROPBEAR_COMMAND}' }-i -s"
-    for host_key in "${encrypted_host_keys[@]}"; do
-        service_unit+=( "LoadCredentialEncrypted=${host_key}" )
-        cmd+=" -r \${CREDENTIALS_DIRECTORY}/${host_key}"
-    done
-    for host_key in "${host_keys[@]}"; do
-        service_unit+=( "LoadCredential=${host_key}" )
-        cmd+=" -r \${CREDENTIALS_DIRECTORY}/${host_key}"
-    done
-    service_unit+=( "ExecStart=${cmd}")
+    service_unit+=( "${load_credential_stmts[@]}" )
     printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.service"
 
     # enable dropbear listening on TCP port $SD_DROPBEAR_PORT (if set to legal port number)
