@@ -88,8 +88,8 @@ build() {
         "StandardInput=socket"
         "StandardOutput=socket"
         "ExecStart=/usr/bin/dropbear ${SD_DROPBEAR_COMMAND:+-c '${SD_DROPBEAR_COMMAND}' }-i -s -m${dropbear_opts}"
+        "${load_credential_stmts[@]}"
     )
-    service_unit+=( "${load_credential_stmts[@]}" )
     printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/dropbear@.service"
 
     # silence error message about missing /var/log/lastlog
