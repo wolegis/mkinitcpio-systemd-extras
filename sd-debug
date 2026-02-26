@@ -1,0 +1,52 @@
+#!/bin/bash
+
+build() {
+    declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+
+    add_busybox || return $?
+
+    add_binary /usr/bin/agetty
+    add_binary /usr/bin/login
+    add_binary /usr/lib/security/pam_unix.so
+    add_binary /usr/bin/unix_chkpwd
+    chmod 6755 "$BUILDROOT/usr/bin/unix_chkpwd"
+
+    local service=(
+        "[Unit]"
+        "Description=initramfs debugging"
+        "DefaultDependencies=no"
+	"Before=sysinit.target"
+        ""
+        "[Service]"
+        "Type=idle"
+	"StandardInput=tty-force"
+        "StandardOutput=tty"
+        "TTYPath=/dev/${SD_DEBUG_TTY:-tty2}"
+        "ExecStart=/usr/bin/agetty --noreset --noclear --autologin root - linux"
+    )
+    printf "%s\n" "${service[@]}" > "${BUILDROOT}/usr/lib/systemd/system/init-debug.service"
+
+    add_symlink /etc/systemd/system/sysinit.target.wants/init-debug.service /usr/lib/systemd/system/init-debug.service
+
+    local pam_conf=(
+        "login   auth       required     pam_unix.so shadow"
+        "login   account    required     pam_unix.so"
+        "login   password   required     pam_unix.so shadow"
+        "login   session    required     pam_unix.so"
+    )
+    printf "%s\n" "${pam_conf[@]}" > "${BUILDROOT}/etc/pam.conf"
+
+}
+
+help() {
+    cat <<__EOF_HELP__
+Starts a root shell (busybox dash) on \$SD_DEBUG_TTY (default tty2).  No login
+password required.
+
+CAUTION:
+
+This install hook opens your system wide open to anybody with physical access.
+It is for debugging purposes only. Use it only temporarily for sorting out
+problems with your initramfs environment.
+__EOF_HELP__
+}
