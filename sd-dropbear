@@ -148,7 +148,7 @@ to be copied into the initramfs.
 Example: To allow to unlock LUKS encrypted volumes from remote specify:
 command="systemd-tty-ask-password-agent" ....
 
-SD_DROP_BEAR takes precedence.
+SD_DROPBEAR_COMMAND takes precedence.
 
 Set SD_DROPBEAR_PORT to specify a port other than 22.
 
