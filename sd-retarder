@@ -7,15 +7,34 @@ build() {
         return 1
     fi
 
-    SD_RETARD_SSH_SERVICE="${SD_RETARD_SSH_SERVICE:-tinyssh}"
-    local unit_name_pattern='^[-a-zA-Z0-9:_.]+$'
+    if [[ -z "$SD_RETARD_SSH_SERVICE" ]]; then
+        local hook
+        for hook in "${HOOKS[@]}"; do
+            case "$hook" in
+                ( sd-tinyssh )
+                    SD_RETARD_SSH_SERVICE="tinyssh"
+                    break ;;
+                ( sd-dropbear )
+                    SD_RETARD_SSH_SERVICE="dropbear"
+                    break ;;
+                ( sd-openssh )
+                    SD_RETARD_SSH_SERVICE="sshd"
+                    break ;;
+            esac
+        done
+    fi
+    [[ "$SD_RETARD_SSH_SERVICE" == "openssh" ]] && SD_RETARD_SSH_SERVICE=sshd
+    local -r unit_name_pattern='^[-a-zA-Z0-9:_.]+$'
     if [[ ! "$SD_RETARD_SSH_SERVICE" =~ $unit_name_pattern ]]; then
         error "Illegal value SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE"
         return 1
     fi
-    if [[ "$SD_RETARD_SSH_SERVICE" != "tinyssh" && "$SD_RETARD_SSH_SERVICE" != "dropbear" ]]; then
-        warning "Not one of the recommended SSH services 'tinyssh' or 'dropbear' SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE"
-    fi
+    case "$SD_RETARD_SSH_SERVICE" in
+        ( tinyssh | dropbear | sshd ) ;;
+        ( * )
+            warning "SD_RETARD_SSH_SERVICE=$SD_RETARD_SSH_SERVICE not one of:"
+            warning "    tinyssh, dropbear, openssh, sshd"
+    esac
 
     declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
@@ -32,7 +51,7 @@ build() {
         "ExecStart=sh -c 'mkfifo /tmp/hold; cat </tmp/hold >/dev/null; rm /tmp/hold'"
         "TimeoutStartSec=infinity"
     )
-    printf "%s\n" "${unit[@]}" > ${BUILDROOT}/usr/lib/systemd/system/retarder.service
+    printf "%s\n" "${unit[@]}" > "${BUILDROOT}/usr/lib/systemd/system/retarder.service"
     add_symlink /etc/systemd/system/sysinit.target.requires/retarder.service /usr/lib/systemd/system/retarder.service
 
     local check_ssh_sessions=(
@@ -44,7 +63,7 @@ build() {
         "[Service]"
         "ExecStopPost=sh -c '${check_ssh_sessions[*]}'"
     )
-    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in ${SD_RETARD_SSH_SERVICE}@.service check-ssh-sessions
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in "${SD_RETARD_SSH_SERVICE}@.service" check-ssh-sessions
 
     if [[ "$SD_RETARD_SECONDS" != "infinity" ]]; then
         unit=(
@@ -56,7 +75,7 @@ build() {
             "[Timer]"
             "OnBootSec=$SD_RETARD_SECONDS"
         )
-        printf "%s\n" "${unit[@]}" > ${BUILDROOT}/usr/lib/systemd/system/check-ssh-sessions.timer
+        printf "%s\n" "${unit[@]}" > "${BUILDROOT}/usr/lib/systemd/system/check-ssh-sessions.timer"
         add_symlink /etc/systemd/system/sysinit.target.wants/check-ssh-sessions.timer /usr/lib/systemd/system/check-ssh-sessions.timer
 
         unit=(
@@ -67,7 +86,7 @@ build() {
             "[Service]"
             "ExecStart=sh -c '${check_ssh_sessions[*]}'"
         )
-        printf "%s\n" "${unit[@]}" > ${BUILDROOT}/usr/lib/systemd/system/check-ssh-sessions.service
+        printf "%s\n" "${unit[@]}" > "${BUILDROOT}/usr/lib/systemd/system/check-ssh-sessions.service"
     fi
 }
 
