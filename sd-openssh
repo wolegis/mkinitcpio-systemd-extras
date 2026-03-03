@@ -1,0 +1,187 @@
+#!/bin/bash
+
+build() {
+    if ! pacman -Qi openssh >/dev/null 2>&1; then
+        error "Package openssh not installed"
+        return 1
+    fi
+
+    declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+
+    add_busybox || return $?
+
+    local keydir="${SD_OPENSSH_KEYDIR:-/etc/ssh}"
+    if [[ ! -d "$keydir" ]]; then
+        error "Host key directory '$keydir' does not exist (or not a directory)"
+        exit 1
+    fi
+
+    local key_type host_key openssh_opts
+    local -a load_credential_stmts
+    for key_type in ed25519 rsa ecdsa; do
+        host_key="ssh_host_${key_type}_key"
+        if [[ -r "${keydir}/${host_key}.enc" ]]; then
+            load_credential_stmts+=( "LoadCredentialEncrypted=${host_key}" )
+            openssh_opts+=" -h \${CREDENTIALS_DIRECTORY}/${host_key}"
+            add_file "${keydir}/${host_key}.enc" "/etc/credstore.encrypted/${host_key}"
+        fi
+    done
+    if [[ "${#load_credential_stmts[@]}" == "0" ]]; then
+        for key_type in ed25519 rsa ecdsa; do
+            host_key="ssh_host_${key_type}_key"
+            if [[ -r "${keydir}/${host_key}" ]]; then
+                load_credential_stmts+=( "LoadCredential=${host_key}" )
+                openssh_opts+=" -h \${CREDENTIALS_DIRECTORY}/${host_key}"
+                add_file "${keydir}/${host_key}" "/etc/credstore/${host_key}"
+            fi
+        done
+        if [[ -z "$SD_OPENSSH_KEYDIR" && "${#load_credential_stmts[@]}" != "0" ]]; then
+            warning "Reusing the host keys from the regular operating environment poses a security risk."
+            warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/OpenSSH-SSH-server for details."
+        fi
+    fi
+    if [[ "${#load_credential_stmts[@]}" == "0" ]]; then
+        error "Missing SSH host keys"
+        return 1
+    fi
+
+    add_binary sshd
+    add_binary /usr/lib/ssh/sshd-session
+    add_binary /usr/lib/ssh/sshd-auth
+
+    if [[ -n "$SD_OPENSSH_CONFIG" ]]; then
+        if [[ ! -r "$SD_OPENSSH_CONFIG" ]]; then
+            error "OpenSSH configuration $SD_OPENSSH_CONFIG does not exist (or not readable)"
+            return 1
+        fi
+        local -r usepam_substitution='s/^([[:blank:]]*)UsePAM .*/\1UsePAM no/'
+        add_dir /etc/ssh
+        sed -E -e "$usepam_substitution" <"$SD_OPENSSH_CONFIG" >"$BUILDROOT/etc/ssh/sshd_config"
+        chmod 600 "$BUILDROOT/etc/ssh/sshd_config"
+        if [[ -d "${SD_OPENSSH_CONFIG}.d" ]]; then
+            add_dir /etc/ssh/sshd_config.d
+            local config_file
+            while read -r config_file; do
+                sed -E -e "$usepam_substitution" <"$config_file" >"$BUILDROOT/etc/ssh/sshd_config.d/${config_file##*/}"
+                chmod 600 "$BUILDROOT/etc/ssh/sshd_config.d/${config_file##*/}"
+            done < <(find "${SD_OPENSSH_CONFIG}.d" -mindepth 1 -maxdepth 1 -type f)
+        fi
+    else
+        local default_config=(
+            "PasswordAuthentication no"
+            "KbdInteractiveAuthentication no"
+            "UsePAM no"
+            "PrintMotd no"
+            "AuthorizedKeysFile .ssh/authorized_keys"
+        )
+        add_dir /etc/ssh
+        printf "%s\n" "${default_config[@]}" > "$BUILDROOT/etc/ssh/sshd_config"
+    fi
+
+    grep '^nobody:' /etc/passwd >>"$BUILDROOT/etc/passwd"
+    grep '^nobody:' /etc/shadow >>"$BUILDROOT/etc/shadow"
+    grep '^nobody:' /etc/group >>"$BUILDROOT/etc/group"
+    grep '^nobody:' /etc/gshadow >>"$BUILDROOT/etc/gshadow"
+
+    add_dir /usr/share/empty.sshd 711
+
+    local socket_unit=(
+        "[Unit]"
+        "Description=OpenSSH server socket"
+        "Documentation=https://man.archlinux.org/man/sshd.8"
+        "Requires=systemd-networkd.service"
+        "After=systemd-networkd.service"
+        "DefaultDependencies=no"
+        ""
+        "[Socket]"
+        "ListenStream=%i"
+        "Accept=true"
+        "KeepAlive=true"
+        "IPTOS=low-delay"
+        ""
+        "[Install]"
+        "WantedBy=sysinit.target"
+    )
+    printf "%s\n" "${socket_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/sshd@.socket"
+
+    local service_unit=(
+        "[Unit]"
+        "Description=OpenSSH server (socket activated)"
+        "Documentation=https://man.archlinux.org/man/sshd.8"
+        "DefaultDependencies=no"
+        "CollectMode=inactive-or-failed"
+        ""
+        "[Service]"
+        "Type=exec"
+        "StandardInput=socket"
+        "StandardOutput=socket"
+        "ExecStart=/usr/bin/sshd -i${SD_OPENSSH_COMMAND:+ -o ForceCommand='${SD_OPENSSH_COMMAND}'}${openssh_opts}"
+        "${load_credential_stmts[@]}"
+    )
+    printf "%s\n" "${service_unit[@]}" > "$BUILDROOT/usr/lib/systemd/system/sshd@.service"
+
+    # enable openssh listening on TCP port $SD_OPENSSH_PORT (if set to legal port number)
+    SD_OPENSSH_PORT="${SD_OPENSSH_PORT:-22}"
+    if (( SD_OPENSSH_PORT < 1 || SD_OPENSSH_PORT > 65535 )); then
+        error "Illegal value SD_OPENSSH_PORT=$SD_OPENSSH_PORT"
+        return 1
+    fi
+    add_symlink "/etc/systemd/system/sysinit.target.wants/sshd@$SD_OPENSSH_PORT.socket" /usr/lib/systemd/system/sshd@.socket
+
+    SD_OPENSSH_AUTHORIZED_KEYS="${SD_OPENSSH_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
+    if [[ -r "$SD_OPENSSH_AUTHORIZED_KEYS" ]]; then
+        add_file "$SD_OPENSSH_AUTHORIZED_KEYS" /root/.ssh/authorized_keys 600
+        chmod 700 "$BUILDROOT/root/.ssh"
+    else
+        error "Keys file '$SD_OPENSSH_AUTHORIZED_KEYS' does not exist (or not readable)"
+        return 1
+    fi
+}
+
+help() {
+    cat <<__EOF_HELP__
+This hook enables OpenSSH server during initramfs phase.  It is only applicable
+for a systemd based intramfs phase, i.e. hook 'systemd' must be given in the
+HOOKS array in mkinitcpio.conf.
+
+See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/OpenSSH-server
+for details.
+
+The hook copies all required files and binaries to the initramfs image and
+enables listening TCP port 22 (or some other).
+
+Host keys are copied from \$SD_OPENSSH_KEYDIR (default /etc/ssh). Host keys
+encrypted with systemd-creds (recognized by the suffix '.enc') are preferred.
+
+By default OpenSSH presents the busybox shell after successful login. This
+behavior can be overruled in two ways:
+
+SD_OPENSSH_COMMAND defines a shell command. The string is appended to 'sh -c',
+i.e. it may contain blanks, quotes and all kinds of special characters that are
+interpreted by the shell.  Example: To allow to unlock LUKS encrypted volumes
+from remote (but nothing else, especially no shell access) set:
+SD_OPENSSH_COMMAND="systemd-tty-ask-password-agent --query --watch"
+
+Use option 'command=...' for the entry in /root/.ssh/authorized_keys that
+contains the public key used to establish the SSH session. In the likely case
+that this option is only desired for the 'authorized_keys' in the initramfs you
+can set SD_OPENSSH_AUTHORIZED_KEYS to specify a special version of this file
+to be copied into the initramfs.
+Example: To allow to unlock LUKS encrypted volumes from remote specify:
+command="systemd-tty-ask-password-agent --query" ssh-ed25519 AAAAC3N....
+
+SD_OPENSSH_COMMAND takes precedence.
+
+Set SD_OPENSSH_PORT to specify a port other than 22.
+
+Set SD_OPENSSH_CONFIG to specify a configuration file to be used by the OpenSSH
+server during initramfs phase. If present directory \$SD_OPENSSH_CONFIG.d is
+automatically taken into account. If not specified a minimal default
+configuration is used.
+
+Set SD_OPENSSH_AUTHORIZED_KEYS to specify a keys file other than
+/root/.ssh/authorized_keys.
+
+If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
+__EOF_HELP__
+}
