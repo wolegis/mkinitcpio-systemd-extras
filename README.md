@@ -9,19 +9,20 @@ specific tool to generate images for the [initial ramdisk
 required during early boot of an Arch Linux installation. There are two options
 how this boot phase can be executed:
 
+* Systemd is started already in the initramfs environment and any
+  initialization is performed by means of systemd units. This is the default
+  since `mkinitcpio` v40 (Nov 2025).
+
 * A bunch of shell scripts run by the busybox shell.
 
-* Systemd is started already in this initramfs environment and any
-  initialization is performed by means of systemd units.
-
-This repository provides so-called install hooks that can be used in
-`mkinitcpio`'s configuration file `mkinitcpio.conf`. They complement the set of
-install hooks for a systemd based boot process provided by other packages like
-e.g. *systemd*, *mkinitcpio*, *cryptsetup*, *lvm2*, ...
+This repository provides so-called install hooks that can be used in the
+`HOOKS` array of `mkinitcpio`'s configuration file `mkinitcpio.conf`. They
+complement the set of install hooks for a systemd based boot process provided
+by package *mkinitcpio* (and others).
 
 > [!CAUTION]
 > Tinkering with the boot process of your system is always risky.  Make sure
-> that you always have at least one option to back out.
+> you always have at least one alternative boot option or for rolling back.
 
 ## Installation
 
