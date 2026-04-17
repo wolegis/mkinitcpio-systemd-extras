@@ -48,7 +48,7 @@ build() {
         ""
         "[Service]"
         "Type=forking"
-        "ExecStart=sh -c 'mkfifo /tmp/hold; cat </tmp/hold >/dev/null; rm /tmp/hold'"
+        "ExecStart=sh -c 'mkfifo /tmp/retarder.fifo; cat </tmp/retarder.fifo >/dev/null; rm /tmp/retarder.fifo'"
         "TimeoutStartSec=infinity"
     )
     printf "%s\n" "${unit[@]}" > "${BUILDROOT}/usr/lib/systemd/system/retarder.service"
@@ -57,7 +57,7 @@ build() {
     local check_ssh_sessions=(
         "systemctl show \"${SD_RETARD_SSH_SERVICE}@*.service\" |"
         "grep -q \"^ActiveState=active\$\" ||"
-        "echo >/tmp/hold"
+        "echo >/tmp/retarder.fifo"
     )
     local drop_in=(
         "[Service]"
