@@ -20,7 +20,7 @@ build() {
         add_file "$keydir/.ed25519.sk" /etc/credstore/.ed25519.sk
     elif [[ -z "$SD_TINYSSH_KEYDIR" && -r /etc/ssh/ssh_host_ed25519_key ]]; then
         tinyssh-convert "$BUILDROOT/etc/credstore" </etc/ssh/ssh_host_ed25519_key
-        warning "Reusing the host keys from the regular operating environment poses a security risk."
+        warning "Reusing the SSH host keys from the regular operating environment poses a security risk."
         warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server for details."
     else
         error "Missing SSH host key"

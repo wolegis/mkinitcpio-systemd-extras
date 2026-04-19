@@ -36,7 +36,7 @@ build() {
             fi
         done
         if [[ -z "$SD_OPENSSH_KEYDIR" && "${#load_credential_stmts[@]}" != "0" ]]; then
-            warning "Reusing the host keys from the regular operating environment poses a security risk."
+            warning "Reusing the SSH host keys from the regular operating environment poses a security risk."
             warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/OpenSSH-SSH-server for details."
         fi
     fi
