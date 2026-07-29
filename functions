@@ -13,18 +13,82 @@ add_busybox() {
     fi
 }
 
+# specifically for copying files that may be symlinks, where the path on the root system
+# and the initramfs may differ:
+# in the case where [[src dir != dest dir && -L src && realsrc dir == dest dir]],
+# copy over the file pointed to by src into dest and omit the symlink - this is an extension
+# of the existing [[-L src && realsrc == dest]] special case
+#
+# this is a modified version of add_file from mkinitcpio:
+# https://gitlab.archlinux.org/archlinux/mkinitcpio/mkinitcpio/-/blob/562a817d7f81179c98f62699ec02b93783db1bc5/functions
+# functionality related to $dest being a symlink or handling devices and input from stdin is omitted.
+custom_add_file() {
+    local src="$1" dest="${2:-$1}" mode="$3"
+
+    # Ensure that $dest is set if there is an empty string
+    if [[ -z "$dest" ]]; then
+        dest="$src"
+    fi
+
+    if [[ ! -f "$src" ]]; then
+        error "file not found: '%s'" "$src"
+        return 1
+    fi
+
+    # check if $src is a symlink
+    if [[ -L "$src" ]]; then
+        srcrealpath="$(realpath -- "$src")"
+        # mirror the symlink only if:
+        # - src doesn't point to dest and
+        # - either src points to a file outside of the dest directory, or src points to the same directory
+        if [[ "$srcrealpath" != "$dest" ]]; then
+            # src points to the same dir - add symlink and copy sibling file
+            if [[ "${src%/*}" == "${srcrealpath%/*}" ]]; then
+                # add the target file, but in the dest dir
+                custom_add_file "$srcrealpath" "${dest%/*}/${srcrealpath##*/}" "$mode"
+                # create the symlink
+                add_symlink "$dest" "${dest%/*}/${srcrealpath##*/}"
+                return
+            fi
+            # points outside dest - standard procedure
+            if [[ "${srcrealpath%/*}" != "${dest%/*}" ]]; then
+                # add the target file
+                custom_add_file "$srcrealpath" "$srcrealpath" "$mode"
+                # create the symlink
+                add_symlink "$dest" "$src"
+                return
+            fi
+        fi
+    fi
+
+    # cp does not create directories leading to the destination and install
+    # does not create the last directory if the destination is a directory.
+    [[ ! -e "${BUILDROOT}${dest%/*}" && ( -z "$mode" || "$dest" == *'/' ) ]] && add_dir "${dest%/*}"
+
+    # if destination ends with a slash, then use the source file name
+    if [[ -e "${BUILDROOT}${dest/%\//\/${src##*/}}" ]]; then
+        quiet 'overwriting file: %s' "${dest/%\//\/${src##*/}}"
+    else
+        quiet 'adding file: %s' "${dest/%\//\/${src##*/}}"
+    fi
+    if [[ -z "$mode" ]]; then
+        command cp --remove-destination --preserve=mode,ownership "$src" "${BUILDROOT}${dest}"
+    else
+        command install -Dm"$mode" "$src" "${BUILDROOT}${dest}"
+    fi
+}
 
 # most (if not all) configuration files used by systemd and its many accompanying tools
 # offer the usage of so-called drop-ins
 add_systemd_config_file() {
     local config_file="$1" destination="${2:-$config_file}" mode="$3"
 
-    add_file "$config_file" "$destination" "$mode" || return $?
+    custom_add_file "$config_file" "$destination" "$mode" || return $?
     if [[ -d "${config_file}.d" ]]; then
         local drop_in
         while read -r drop_in; do
-            add_file "$drop_in" "${destination}.d/${drop_in##*/}" "$mode" || return $?
-        done < <(find "${config_file}.d" -mindepth 1 -maxdepth 1 -type f -name '*.conf')
+            custom_add_file "$drop_in" "${destination}.d/${drop_in##*/}" "$mode" || return $?
+        done < <(find "${config_file}.d" -mindepth 1 -maxdepth 1 -xtype f -name '*.conf')
     fi
 }
 
@@ -43,5 +107,5 @@ add_systemd_config_dir() {
     done
     while read -r config_file; do
         add_systemd_config_file "$config_dir/$config_file" "$destination/$config_file" "$mode" || return $?
-    done < <(find "$config_dir" -mindepth 1 -maxdepth 1 -type f "${filter[@]}" | sed -e "s|^${config_dir}/||")
+    done < <(find "$config_dir" -mindepth 1 -maxdepth 1 -xtype f "${filter[@]}" | sed -e "s|^${config_dir}/||")
 }
