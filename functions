@@ -14,34 +14,45 @@ add_busybox() {
 }
 
 
-# most (if not all) configuration files used by systemd and its many accompanying tools
-# offer the usage of so-called drop-ins
 add_systemd_config_file() {
     local config_file="$1" destination="${2:-$config_file}" mode="$3"
 
     add_file "$config_file" "$destination" "$mode" || return $?
-    if [[ -d "${config_file}.d" ]]; then
+
+    # most (if not all) configuration files used by systemd and its many accompanying tools offer
+    # the usage of so-called drop-ins
+    local drop_in_dir="$(realpath -- "${config_file}.d")"
+    if [[ -d "$drop_in_dir" ]]; then
         local drop_in
         while read -r drop_in; do
-            add_file "$drop_in" "${destination}.d/${drop_in##*/}" "$mode" || return $?
-        done < <(find "${config_file}.d" -mindepth 1 -maxdepth 1 -type f -name '*.conf')
+            drop_in="$(realpath -- "${drop_in}")"
+            if [[ -f "$drop_in" ]]; then
+                add_file "$drop_in" "${destination}.d/${drop_in##*/}" "$mode" || return $?
+            fi
+        done < <(find "$drop_in_dir" -mindepth 1 -maxdepth 1 \( -type f -o -type l \) -name '*.conf')
     fi
 }
 
-# argument $4 and following are glob patterns to exclude certain configuration files
 add_systemd_config_dir() {
     local config_dir="$1" destination="${2:-$config_dir}" mode="$3"
 
-    shift; shift; shift
+    config_dir="$(realpath -- "${config_dir}")"
     if [[ ! -d "$config_dir" ]]; then
         error "${config_dir} is not a directory or does not exist"
         return 1
     fi
-    local exclude filter=() config_file
+
+    # argument $4 and following are glob patterns to exclude certain configuration files
+    shift; shift; shift
+    local exclude config_file
+    local find_cmd=( find "$config_dir" -mindepth 1 -maxdepth 1 "(" -type f -o -type l ")" )
     for exclude in "$@"; do
-        filter+=("!" "-name" "$exclude")
+        find_cmd+=("!" "-name" "$exclude")
     done
     while read -r config_file; do
-        add_systemd_config_file "$config_dir/$config_file" "$destination/$config_file" "$mode" || return $?
-    done < <(find "$config_dir" -mindepth 1 -maxdepth 1 -type f "${filter[@]}" | sed -e "s|^${config_dir}/||")
+        config_file="$(realpath -- "$config_file")"
+        if [[ -f "$config_file" ]]; then
+            add_systemd_config_file "$config_dir/$config_file" "$destination/$config_file" "$mode" || return $?
+        fi
+    done < <("${find_cmd[@]}" | sed -e "s|^${config_dir}/||")
 }
