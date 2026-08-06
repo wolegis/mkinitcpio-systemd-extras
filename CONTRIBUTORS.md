@@ -29,3 +29,5 @@
 2026-01-19 [Benjamin Flesch](https://github.com/bf) raised a (well-founded) [security concern](https://github.com/wolegis/mkinitcpio-systemd-extras/issues/26) about secret host keys being copied to the unencrypted initramfs image. The best solution I could come up with at this time was to emit a warning when OpenSSH keys are copied to the initramfs and additionally extend the documentation in this regard. But later...
 
 2026-02-13 [Matthias R. Wiora](https://github.com/mrwiora) contributed a [variant of `sd-tinyssh`](https://github.com/wolegis/mkinitcpio-systemd-extras/pull/27) using `systemd-creds`, thus avoiding cleartext host keys in the initramfs image altogether. I [integrated his ideas](https://github.com/wolegis/mkinitcpio-systemd-extras/commit/55e5451210d8336358a0aa0b326565d905a89bf8) into the existing hooks `sd-tinyssh` and `sd-dropbear`.
+
+2026-07-29 [mini-bomba](https://github.com/mini-bomba) discovered that symbolic links in and below the network configuration directory are simply ignored and suggested a [fix](https://github.com/wolegis/mkinitcpio-systemd-extras/pull/32) for that.
