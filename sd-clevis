@@ -15,7 +15,7 @@ build() {
     local has_tpm2=""
     pacman -Qi tpm2-tools >/dev/null 2>&1 && has_tpm2=true
 
-    if [[ ! "$has_curl" && ! "$has_curl" ]]; then
+    if [[ ! "$has_curl" && ! "$has_tpm2" ]]; then
         error "Neither curl nor tpm2-tools installed. This will not work"
         return 1
     fi

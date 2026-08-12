@@ -12,7 +12,7 @@ build() {
 	"Before=sysinit.target"
         ""
         "[Service]"
-        "Type=forking"
+        "Type=oneshot"
         "ExecStart=sh -c 'touch /etc/hold; while [ -f /etc/hold ]; do sleep 2; done'"
         "TimeoutStartSec=infinity"
     )
