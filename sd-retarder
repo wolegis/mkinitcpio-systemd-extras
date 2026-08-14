@@ -47,7 +47,7 @@ build() {
 	"Before=sysinit.target"
         ""
         "[Service]"
-        "Type=oneshot"
+        "Type=forking"
         "ExecStart=sh -c 'mkfifo /tmp/retarder.fifo; cat </tmp/retarder.fifo >/dev/null; rm /tmp/retarder.fifo'"
         "TimeoutStartSec=infinity"
     )
