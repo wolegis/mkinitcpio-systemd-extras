@@ -3,7 +3,7 @@
 build() {
     declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
-    add_busybox || return $?
+    add_busybox || return
 
     add_binary /usr/bin/agetty
     add_binary /usr/bin/login

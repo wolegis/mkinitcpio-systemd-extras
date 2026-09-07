@@ -3,7 +3,7 @@
 build() {
     declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
-    add_busybox || return $?
+    add_busybox || return
 
     local service=(
         "[Unit]"
@@ -12,7 +12,7 @@ build() {
 	"Before=sysinit.target"
         ""
         "[Service]"
-        "Type=forking"
+        "Type=oneshot"
         "ExecStart=sh -c 'touch /etc/hold; while [ -f /etc/hold ]; do sleep 2; done'"
         "TimeoutStartSec=infinity"
     )

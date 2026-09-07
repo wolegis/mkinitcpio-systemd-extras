@@ -10,9 +10,9 @@ build() {
     declare -F add_systemd_config_file >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
     add_systemd_config_file "${SD_NETWORKD_CONFIG:-/etc/systemd/networkd.conf}" \
-            "/etc/systemd/networkd.conf" 444 || return $?
+            "/etc/systemd/networkd.conf" 444 || return
     add_systemd_config_dir "${SD_NETWORK_CONFIG:-/etc/systemd/network}" "/etc/systemd/network" \
-            444 "${SD_NETWORK_EXCLUDES[@]}" || return $?
+            444 "${SD_NETWORK_EXCLUDES[@]}" || return
 
     add_checked_modules /drivers/net
 

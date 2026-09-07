@@ -63,7 +63,7 @@ add_systemd_config_dir() {
     find_cmd+=("-print0")
     while read -d '' -r config_file; do
         if [[ -f "$(realpath -- "$config_file")" ]]; then
-            add_systemd_config_file "$config_file" "$destination/${config_file##*/}" "$mode" || return $?
+            add_systemd_config_file "$config_file" "$destination/${config_file##*/}" "$mode" || return
         fi
     done < <(IFS= "${find_cmd[@]}")
 }

@@ -8,7 +8,7 @@ build() {
 
     declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
-    add_busybox || return $?
+    add_busybox || return
 
     local keydir="${SD_DROPBEAR_KEYDIR:-/etc/dropbear}"
     local key_type host_key dropbear_opts convert_cmd
