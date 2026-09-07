@@ -33,3 +33,5 @@
 2026-07-29 [mini-bomba](https://github.com/mini-bomba) discovered that symbolic links in and below the network configuration directory are simply ignored and suggested a [fix](https://github.com/wolegis/mkinitcpio-systemd-extras/pull/32) for that.
 
 2026-08-12 [Amin Vakil](https://github.com/aminvakil) fixed [two bugs](https://github.com/wolegis/mkinitcpio-systemd-extras/pull/34) in `sd-clevis` and `sd-nftables`.
+
+2026-08-12 [Amin Vakil](https://github.com/aminvakil) also pointed out that in `sd-hold` and `sd-retarder` service type *oneshot* is more appropriate than *forking*.
