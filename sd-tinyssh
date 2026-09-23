@@ -1,82 +1,61 @@
 #!/bin/bash
 
 build() {
-    if ! pacman -Qi tinyssh >/dev/null 2>&1; then
-        error "Package tinyssh not installed"
-        return 1
-    fi
+    # mkinitcpio does not source the helpers when the hook is run standalone
+    declare -F tinyssh_add_server >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
 
-    declare -F add_busybox >/dev/null || . /usr/lib/initcpio/functions.d/systemd-extras
+    tinyssh_add_base || return
 
-    add_busybox || return
+    local variant="${SD_TINYSSH:-openssh-tpm2}"
+    local openssh_host_key=/etc/ssh/ssh_host_ed25519_key
+    local keydir key_source converted= rc=0
+    local exec_start credentials=()
 
-    local encrypted keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
-    if [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk.enc" ]]; then
-        add_file "$keydir/ed25519.pk" /etc/credstore/ed25519.pk
-        add_file "$keydir/.ed25519.sk.enc" /etc/credstore.encrypted/.ed25519.sk
-        encrypted=Encrypted
-    elif [[ -r "$keydir/ed25519.pk" && -r "$keydir/.ed25519.sk" ]]; then
-        add_file "$keydir/ed25519.pk" /etc/credstore/ed25519.pk
-        add_file "$keydir/.ed25519.sk" /etc/credstore/.ed25519.sk
-    elif [[ -z "$SD_TINYSSH_KEYDIR" && -r /etc/ssh/ssh_host_ed25519_key ]]; then
-        tinyssh-convert "$BUILDROOT/etc/credstore" </etc/ssh/ssh_host_ed25519_key
-        warning "Reusing the SSH host keys from the regular operating environment poses a security risk."
-        warning "See https://github.com/wolegis/mkinitcpio-systemd-extras/wiki/TinySSH-server for details."
-    else
-        error "Missing SSH host key"
-        return 1
-    fi
+    # the key pair in cleartext, either tinyssh's own or converted from the OpenSSH host key
+    case "$variant" in
 
-    add_systemd_unit tinyssh@.socket
-    add_systemd_unit tinyssh@.service
+        openssh-tpm2)
+            keydir="$(tinyssh_convert_openssh_key "$openssh_host_key")" || return
+            key_source="OpenSSH host key '$openssh_host_key'"
+            converted=1
+            ;;
 
-    # enable tinysshd listening on TCP port $SD_TINYSSH_PORT (if set to legal port number)
-    SD_TINYSSH_PORT="${SD_TINYSSH_PORT:-22}"
-    if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
-        error "Illegal value SD_TINYSSH_PORT=$SD_TINYSSH_PORT"
-        return 1
-    fi
-    add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket" /usr/lib/systemd/system/tinyssh@.socket
+        tinykey-tpm2|tinykey-cleartext)
+            keydir="$(tinyssh_key_directory)" || return
+            key_source="tinyssh key pair in '$keydir'"
+            ;;
 
-    local drop_in=(
-        '[Unit]'
-        'Requires=systemd-networkd.service'
-        'After=systemd-networkd.service'
-        'DefaultDependencies=no'
-    )
-    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in "tinyssh@$SD_TINYSSH_PORT.socket" override
+        *)
+            error "Unknown variant SD_TINYSSH='%s', pick %s, %s or %s" "$variant" \
+                "openssh-tpm2" "tinykey-tpm2" "tinykey-cleartext"
+            return 1
+            ;;
 
-    drop_in=(
-        "[Unit]"
-        "DefaultDependencies=no"
-        "CollectMode=inactive-or-failed"
-        ""
-        "[Service]"
-        "ExecStart="
-        "ExecStart=-/usr/bin/tinysshd ${SD_TINYSSH_COMMAND:+-e '${SD_TINYSSH_COMMAND}' }\${CREDENTIALS_DIRECTORY}"
-        "LoadCredential=ed25519.pk"
-        "LoadCredential${encrypted}=.ed25519.sk"
-    )
-    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
+    esac
 
-    SD_TINYSSH_AUTHORIZED_KEYS=${SD_TINYSSH_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}
-    if [[ ! -r "$SD_TINYSSH_AUTHORIZED_KEYS" ]]; then
-        error "Keys file '$SD_TINYSSH_AUTHORIZED_KEYS' does not exist (or not readable)"
-        return 1
-    fi
-    add_dir /root/.ssh
-    grep '^ssh-ed25519 ' "$SD_TINYSSH_AUTHORIZED_KEYS" >"$BUILDROOT/root/.ssh/authorized_keys"
-    if [[ -s "$BUILDROOT/root/.ssh/authorized_keys" ]]; then
-        chmod 600 "$BUILDROOT/root/.ssh/authorized_keys"
-        chmod 700 "$BUILDROOT/root/.ssh"
-    else
-        error "No ED25519 key found for root"
-        return 1
-    fi
+    msg "variant %s, host key taken from the %s" "$variant" "$key_source"
 
-    if [[ -z "$SD_TINYSSH_COMMAND" && -r "$SD_TINYSSH_SCRIPT" ]]; then
-        add_file "$SD_TINYSSH_SCRIPT" /root/.profile 600
-    fi
+    case "$variant" in
+
+        *-tpm2)
+            tinyssh_add_sealed_key "$keydir/ed25519.pk" "$keydir/.ed25519.sk"
+            rc=$?
+            exec_start="ExecStart=-/usr/bin/tinyssh-start $(tinyssh_command_option)"
+            ;;
+
+        *-cleartext)
+            tinyssh_add_cleartext_key "$keydir/ed25519.pk" "$keydir/.ed25519.sk"
+            rc=$?
+            exec_start="ExecStart=-/usr/bin/tinysshd $(tinyssh_command_option)\${CREDENTIALS_DIRECTORY}"
+            credentials=( "LoadCredential=ed25519.pk" "LoadCredential=.ed25519.sk" )
+            ;;
+
+    esac
+
+    [[ -n "$converted" ]] && rm -rf -- "${keydir%/*}"
+    (( rc == 0 )) || return 1
+
+    tinyssh_add_server "ExecStart=" "$exec_start" "${credentials[@]}"
 }
 
 help() {
@@ -91,10 +70,46 @@ for details.
 The hook copies all files and binaries required by tinyssh to the initramfs
 image and enables listening TCP port 22 (or some other).
 
-Host keys are copied from \$SD_TINYSSH_KEYDIR (default /etc/tinyssh/sshkeydir).
-A secret host key '.ed25519.sk.enc' encrypted with systemd-creds is preferred.
-As a last resort the OpenSSH host key /etc/ssh/ssh_host_ed25519_key is
-converted on the fly.  This last option requires python to be installed.
+Set SD_TINYSSH to choose which host key is served and how it is protected:
+
+  openssh-tpm2       the OpenSSH host key of this system, sealed to the TPM,
+                     used when SD_TINYSSH is not set at all
+  tinykey-tpm2       a tinyssh key pair of its own, sealed to the TPM
+  tinykey-cleartext  a tinyssh key pair of its own, stored in cleartext, the
+                     only variant that works without a TPM
+
+'openssh-tpm2' converts /etc/ssh/ssh_host_ed25519_key on the fly. Nothing has
+to be prepared, and the initramfs answers with the same host key as the booted
+system, so the clients need no second entry in their known_hosts file. The
+conversion requires python to be installed.
+
+The 'tinykey' variants expect a key pair in \$SD_TINYSSH_KEYDIR (default
+/etc/tinyssh/sshkeydir). It has to be generated first, otherwise the build
+fails:
+
+  tinysshd-makekey /etc/tinyssh/sshkeydir
+
+The 'tpm2' variants seal the secret key while the image is built, so it is of
+no use to anyone who reads the unencrypted initramfs. The build fails if no
+usable TPM2 device is present. Sealing happens on every rebuild against the PCR
+values of the moment, which repairs the host key after a firmware update: boot
+once, unlock the volume, and the next 'mkinitcpio' run makes the image work
+again.
+
+Set SD_TINYSSH_TPM2_PCRS to the PCRs to seal against, e.g. "0+7". If it is
+unset, the default of systemd-creds is used, which is PCR 7 alone.
+
+At boot /usr/bin/tinyssh-start unseals the key itself instead of leaving that
+to systemd, because a credential that cannot be decrypted fails its unit before
+the server is even started. Should the unsealing fail, the script generates a
+throwaway host key and reports its fingerprint on the console and in the
+journal, so that a volume can still be unlocked from remote. The ssh client
+reports a changed host key then and refuses to connect until the old key is
+removed from its known_hosts file, e.g. with 'ssh-keygen -R <host>'.
+
+'tinykey-cleartext' keeps the secret key unprotected. The initramfs is
+unencrypted, so anyone who can read the image obtains the key and can
+impersonate this machine.
 
 By default tinyssh presents the busybox shell after successful login. Two
 variables can be used to alter this behavior:
@@ -115,8 +130,11 @@ SD_TINYSSH_COMMAND takes precedence.
 
 Set SD_TINYSSH_PORT to specify a port other than 22.
 
-Set SD_TINYSSH_AUTHORIZED_KEYS to specify a keys file other than
-/root/.ssh/authorized_keys.
+Login is allowed for the public keys taken from /root/.ssh/authorized_keys of
+this system, which are copied into the image. tinyssh speaks ED25519 only, so
+entries of every other key type are dropped and at least one 'ssh-ed25519'
+entry has to be present. Set SD_TINYSSH_AUTHORIZED_KEYS to read the keys from
+another file.
 
 If required the above mentioned variables must be set in /etc/mkinitcpio.conf.
 __EOF_HELP__

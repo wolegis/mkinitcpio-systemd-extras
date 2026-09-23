@@ -67,3 +67,232 @@ add_systemd_config_dir() {
         fi
     done < <(IFS= "${find_cmd[@]}")
 }
+
+# ---------------------------------------------------------------------------
+# helpers shared by the sd-tinyssh* install hooks
+# ---------------------------------------------------------------------------
+
+# tinysshd and tinyssh-convert are taken from the host installation
+tinyssh_add_base() {
+    if ! pacman -Qi tinyssh >/dev/null 2>&1; then
+        error "Package tinyssh not installed"
+        return 1
+    fi
+
+    add_busybox
+}
+
+# prints the tinyssh key directory after making sure that it holds a readable key pair
+tinyssh_key_directory() {
+    local keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
+
+    if [[ ! -r "$keydir/ed25519.pk" || ! -r "$keydir/.ed25519.sk" ]]; then
+        error "No tinyssh key pair in '%s', generate the key material first: tinysshd-makekey %s" \
+            "$keydir" "$keydir"
+        return 1
+    fi
+
+    printf '%s' "$keydir"
+}
+
+# converts the OpenSSH host key of the running system and prints the temporary key directory,
+# which the caller has to remove again
+tinyssh_convert_openssh_key() {
+    local openssh_host_key="${1:-/etc/ssh/ssh_host_ed25519_key}"
+
+    if [[ ! -r "$openssh_host_key" ]]; then
+        error "OpenSSH host key '%s' does not exist (or not readable)" "$openssh_host_key"
+        return 1
+    fi
+
+    local tmpdir
+    tmpdir="$(mktemp -d)" || return 1
+
+    # tinyssh-convert creates the key directory itself and refuses to write into an existing one,
+    # its output must not end up in the key directory path printed below
+    if ! tinyssh-convert "$tmpdir/sshkeydir" <"$openssh_host_key" >&2; then
+        rm -rf -- "$tmpdir"
+        error "Conversion of the OpenSSH host key '%s' failed" "$openssh_host_key"
+        return 1
+    fi
+
+    printf '%s' "$tmpdir/sshkeydir"
+}
+
+# stores the key pair as a systemd credential, readable by anyone who can read the image
+#   $1: public key, $2: secret key
+tinyssh_add_cleartext_key() {
+    add_file "$1" /etc/credstore/ed25519.pk || return
+    add_file "$2" /etc/credstore/.ed25519.sk || return
+
+    warning "Initramfs is unencrypted, so the included dedicated SSH Host Key is exposed and might be missused for impersonation!"
+}
+
+# seals the secret key to the TPM and adds the script that unseals it at boot
+#   $1: public key, $2: secret key
+tinyssh_add_sealed_key() {
+    if ! systemd-analyze has-tpm2 -q; then
+        error "No usable TPM2 device, set SD_TINYSSH=tinykey-cleartext to run without one"
+        return 1
+    fi
+
+    local pcrs=()
+    [[ -n "$SD_TINYSSH_TPM2_PCRS" ]] && pcrs=( --tpm2-pcrs="$SD_TINYSSH_TPM2_PCRS" )
+
+    add_dir /etc/tinyssh 700
+
+    # sealing on every build renews the policy whenever the measured state changed
+    if ! systemd-creds encrypt --with-key=tpm2 "${pcrs[@]}" --name= \
+            "$2" "$BUILDROOT/etc/tinyssh/.ed25519.sk.enc"; then
+        error "Sealing the secret key '%s' to the TPM failed" "$2"
+        return 1
+    fi
+
+    msg "sealed the secret key to TPM2 PCRs %s" "${SD_TINYSSH_TPM2_PCRS:-7 (default)}"
+
+    chmod 600 "$BUILDROOT/etc/tinyssh/.ed25519.sk.enc"
+    add_file "$1" /etc/tinyssh/ed25519.pk || return
+
+    # the sealed values are taken from a running system, where systemd has already extended the OS
+    # separator into PCR 0-7, 9 and 12-14; ordering against a unit that never starts is a no-op
+    printf "%s\n" \
+        '[Unit]' \
+        'After=systemd-pcrosseparator.service' |
+        add_systemd_drop_in tinyssh@.service pcr-order
+
+    tinyssh_add_start_script
+}
+
+# expands to the '-e <command>' option of tinysshd when SD_TINYSSH_COMMAND is set
+tinyssh_command_option() {
+    [[ -n "$SD_TINYSSH_COMMAND" ]] && printf -- "-e '%s' " "$SD_TINYSSH_COMMAND"
+}
+
+# writes /usr/bin/tinyssh-start, which assembles the key directory from /etc/tinyssh and starts
+# tinysshd; the encrypted secret key is decrypted there rather than by systemd, because a credential
+# that fails to decrypt fails its unit before any ExecStart= of that unit runs, leaving no way in
+tinyssh_add_start_script() {
+    add_binary systemd-creds
+    add_binary tinysshd-makekey
+    add_binary tinysshd-printkey
+
+    # holds the key directory assembled at boot, unlike /run it is not carried over into the booted system
+    add_dir /tmp 1777
+
+    local start_script=(
+        '#!/usr/bin/sh'
+        ''
+        'srcdir=/etc/tinyssh'
+        'keydir=/tmp/tinysshd'
+        ''
+        '# whoever stands in front of the machine does not see the journal'
+        'notify() {'
+        '    [ -w /dev/console ] && echo "tinyssh-start: $1" >/dev/console'
+        '    echo "tinyssh-start: $1" >&2'
+        '}'
+        ''
+        '# the SHA256 fingerprint as an ssh client prints it, assembled from busybox applets'
+        'fingerprint() {'
+        '    /usr/bin/tinysshd-printkey "$1" | cut -d" " -f2 | base64 -d |'
+        '        sha256sum | cut -c1-64 | xxd -r -p | base64 | cut -c1-43'
+        '}'
+        ''
+        '# mkdir doubles as the lock, only the first connection assembles the key directory'
+        'if [ ! -s "$keydir/.ed25519.sk" ] && mkdir "$keydir" 2>/dev/null; then'
+        ''
+        '    chmod 700 "$keydir"'
+        ''
+        '    if /usr/bin/systemd-creds decrypt --name= "$srcdir/.ed25519.sk.enc" "$keydir/.ed25519.sk"; then'
+        ''
+        '        cp "$srcdir/ed25519.pk" "$keydir/ed25519.pk"'
+        ''
+        '    else'
+        ''
+        '        # the key is lost whenever the measured state changes, e.g. after a firmware update'
+        '        rm -rf "$keydir"'
+        '        if /usr/bin/tinysshd-makekey -q "$keydir"; then'
+        '            notify "host key not decryptable, serving a throwaway key instead"'
+        '            notify "host key fingerprint is SHA256:$(fingerprint "$keydir")"'
+        '            notify "the ssh client refuses to connect until ssh-keygen -R removed the old key"'
+        '        else'
+        '            notify "host key not decryptable and generating a throwaway key failed"'
+        '        fi'
+        ''
+        '    fi'
+        ''
+        'fi'
+        ''
+        'exec /usr/bin/tinysshd "$@" "$keydir"'
+    )
+    printf "%s\n" "${start_script[@]}" > "$BUILDROOT/usr/bin/tinyssh-start"
+    chmod 755 "$BUILDROOT/usr/bin/tinyssh-start"
+}
+
+# units, listening port, authorized keys and login script
+#   $@: the [Service] lines of the drop-in for tinyssh@.service
+tinyssh_add_server() {
+    add_systemd_unit tinyssh@.socket
+    add_systemd_unit tinyssh@.service
+
+    SD_TINYSSH_PORT="${SD_TINYSSH_PORT:-22}"
+    if (( SD_TINYSSH_PORT < 1 || SD_TINYSSH_PORT > 65535 )); then
+        error "Illegal value SD_TINYSSH_PORT=$SD_TINYSSH_PORT"
+        return 1
+    fi
+    msg "tinysshd listens on TCP port %s" "$SD_TINYSSH_PORT"
+
+    add_symlink "/etc/systemd/system/sysinit.target.wants/tinyssh@$SD_TINYSSH_PORT.socket" \
+        /usr/lib/systemd/system/tinyssh@.socket
+
+    local drop_in=(
+        '[Unit]'
+        'Requires=systemd-networkd.service'
+        'After=systemd-networkd.service'
+        'DefaultDependencies=no'
+    )
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in "tinyssh@$SD_TINYSSH_PORT.socket" override
+
+    drop_in=(
+        '[Unit]'
+        'DefaultDependencies=no'
+        'CollectMode=inactive-or-failed'
+        ''
+        '[Service]'
+        "$@"
+    )
+    printf "%s\n" "${drop_in[@]}" | add_systemd_drop_in tinyssh@.service override
+
+    tinyssh_add_authorized_keys || return
+
+    # the login script is pointless when a fixed command replaces the shell
+    if [[ -z "$SD_TINYSSH_COMMAND" && -r "$SD_TINYSSH_SCRIPT" ]]; then
+        add_file "$SD_TINYSSH_SCRIPT" /root/.profile 600
+    fi
+}
+
+tinyssh_add_authorized_keys() {
+    SD_TINYSSH_AUTHORIZED_KEYS="${SD_TINYSSH_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
+
+    if [[ ! -r "$SD_TINYSSH_AUTHORIZED_KEYS" ]]; then
+        error "Keys file '%s' does not exist (or not readable)" "$SD_TINYSSH_AUTHORIZED_KEYS"
+        return 1
+    fi
+
+    add_dir /root/.ssh
+
+    msg "authorized keys for root: '%s'" "$SD_TINYSSH_AUTHORIZED_KEYS"
+
+    # tinyssh speaks ED25519 only, so every other key type is dropped here
+    grep '^ssh-ed25519 ' "$SD_TINYSSH_AUTHORIZED_KEYS" >"$BUILDROOT/root/.ssh/authorized_keys"
+    if [[ ! -s "$BUILDROOT/root/.ssh/authorized_keys" ]]; then
+        error "No ED25519 key found for root in '%s'" "$SD_TINYSSH_AUTHORIZED_KEYS"
+        return 1
+    fi
+
+    msg "added %s of %s key(s), only ED25519 keys are accepted by tinyssh" \
+        "$(grep -c '' "$BUILDROOT/root/.ssh/authorized_keys")" \
+        "$(grep -c '^[^#[:space:]]' "$SD_TINYSSH_AUTHORIZED_KEYS")"
+
+    chmod 600 "$BUILDROOT/root/.ssh/authorized_keys"
+    chmod 700 "$BUILDROOT/root/.ssh"
+}
