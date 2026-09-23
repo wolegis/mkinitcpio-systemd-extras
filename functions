@@ -87,7 +87,8 @@ tinyssh_key_directory() {
     local keydir="${SD_TINYSSH_KEYDIR:-/etc/tinyssh/sshkeydir}"
 
     if [[ ! -r "$keydir/ed25519.pk" || ! -r "$keydir/.ed25519.sk" ]]; then
-        error "Missing tinyssh key pair in '%s', create it with 'tinysshd-makekey %s'" "$keydir" "$keydir"
+        error "No tinyssh key pair in '%s', generate the key material first: tinysshd-makekey %s" \
+            "$keydir" "$keydir"
         return 1
     fi
 
@@ -130,6 +131,11 @@ tinyssh_add_cleartext_key() {
 # seals the secret key to the TPM and adds the script that unseals it at boot
 #   $1: public key, $2: secret key
 tinyssh_add_sealed_key() {
+    if ! systemd-analyze has-tpm2 -q; then
+        error "No usable TPM2 device, set SD_TINYSSH=tinykey-cleartext to run without one"
+        return 1
+    fi
+
     local pcrs=()
     [[ -n "$SD_TINYSSH_TPM2_PCRS" ]] && pcrs=( --tpm2-pcrs="$SD_TINYSSH_TPM2_PCRS" )
 
