@@ -98,7 +98,7 @@ tinyssh_key_directory() {
 # converts the OpenSSH host key of the running system and prints the temporary key directory,
 # which the caller has to remove again
 tinyssh_convert_openssh_key() {
-    local openssh_host_key=/etc/ssh/ssh_host_ed25519_key
+    local openssh_host_key="${1:-/etc/ssh/ssh_host_ed25519_key}"
 
     if [[ ! -r "$openssh_host_key" ]]; then
         error "OpenSSH host key '%s' does not exist (or not readable)" "$openssh_host_key"

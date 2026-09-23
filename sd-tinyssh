@@ -7,19 +7,22 @@ build() {
     tinyssh_add_base || return
 
     local variant="${SD_TINYSSH:-openssh-tpm2}"
-    local keydir converted= rc=0
+    local openssh_host_key=/etc/ssh/ssh_host_ed25519_key
+    local keydir key_source converted= rc=0
     local exec_start credentials=()
 
     # the key pair in cleartext, either tinyssh's own or converted from the OpenSSH host key
     case "$variant" in
 
         openssh-tpm2)
-            keydir="$(tinyssh_convert_openssh_key)" || return
+            keydir="$(tinyssh_convert_openssh_key "$openssh_host_key")" || return
+            key_source="OpenSSH host key '$openssh_host_key'"
             converted=1
             ;;
 
         tinykey-tpm2|tinykey-cleartext)
             keydir="$(tinyssh_key_directory)" || return
+            key_source="tinyssh key pair in '$keydir'"
             ;;
 
         *)
@@ -30,7 +33,7 @@ build() {
 
     esac
 
-    msg "variant %s, host key taken from '%s'" "$variant" "$keydir"
+    msg "variant %s, host key taken from the %s" "$variant" "$key_source"
 
     case "$variant" in
 
