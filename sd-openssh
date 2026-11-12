@@ -73,6 +73,7 @@ build() {
             "UsePAM no"
             "PrintMotd no"
             "AuthorizedKeysFile .ssh/authorized_keys"
+            "AllowTcpForwarding no"
         )
         add_dir /etc/ssh
         printf "%s\n" "${default_config[@]}" > "$BUILDROOT/etc/ssh/sshd_config"

@@ -11,7 +11,8 @@ build() {
     add_busybox || return
 
     local keydir="${SD_DROPBEAR_KEYDIR:-/etc/dropbear}"
-    local key_type host_key dropbear_opts convert_cmd
+    local key_type host_key convert_cmd
+    local dropbear_opts=" -j -k"
     local -a load_credential_stmts
     for key_type in ed25519 rsa ecdsa dss; do
         host_key="dropbear_${key_type}_host_key"
