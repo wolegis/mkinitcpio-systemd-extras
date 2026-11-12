@@ -35,3 +35,5 @@
 2026-08-12 [Amin Vakil](https://github.com/aminvakil) fixed [two bugs](https://github.com/wolegis/mkinitcpio-systemd-extras/pull/34) in `sd-clevis` and `sd-nftables`.
 
 2026-08-12 [Amin Vakil](https://github.com/aminvakil) also pointed out that in `sd-hold` and `sd-retarder` service type *oneshot* is more appropriate than *forking*.
+
+2026-11-09 [Jynn Nelson](https://github.com/jyn514) seems to be good at instructing LLMs and one of those found out that [port forwarding over an SSH connection to your initramfs environment](https://github.com/wolegis/mkinitcpio-systemd-extras/issues/36) is pointless at best, or highly risky at worst.
